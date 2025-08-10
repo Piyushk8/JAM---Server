@@ -6,6 +6,7 @@ import {
   calculateAudioLevel,
   calculateDistance,
   getUsersInProximity,
+  TILE_SIZE,
 } from "../lib/util";
 import {
   ChatMessage,
@@ -18,12 +19,13 @@ import {
 } from "../types/type";
 import { diffSets, SpatialGrid } from "../lib/spatialGrid";
 import { CELL_SIZE, TICK_RATE } from "../lib/contants";
+import roomManager from "../RoomManager";
 // const rooms = new Map<string, Room>();
 // const users = new Map<string, User>();
 const PROXIMITY_THRESHOLD = 150; // Distance for chat/video connection
 const CHAT_RANGE = 200; // Distance for seeing chat messages
 
-type RoomRuntimeState = {
+export type RoomRuntimeState = {
   id: string;
   users: Map<string, User>;
   // last proximity set per user
@@ -34,15 +36,11 @@ export default class webSocketService {
   public io: Server;
   public httpServer: HTTPServer;
   public app: Application;
-  private rooms: Map<string, RoomRuntimeState>;
-  private users: Map<string, User>;
   public spatial: SpatialGrid;
   private tickHandle?: ReturnType<typeof setTimeout>;
 
   constructor(app: Application) {
     this.app = app;
-    this.rooms = new Map();
-    this.users = new Map();
     this.httpServer = new http.Server(app);
     this.io = new Server<ClientToServer | ServerToClient>(this.httpServer, {
       cors: {
@@ -59,72 +57,79 @@ export default class webSocketService {
     const interval = 1000 / TICK_RATE;
     this.tickHandle = setInterval(() => this.tick(), interval);
   }
-  
+
   private stopTick() {
     if (this.tickHandle) clearInterval(this.tickHandle);
   }
 
   private tick() {
-    for (const [roomId, room] of this.rooms) {
+    for (const [roomId, room] of roomManager.getRoomsMap()) {
       const users = Array.from(room.users.values());
-
-      // Build & send batched positions per user (filtered to proximity)
-      // Also compute proximity graph & send enter/leave diffs.
       for (const me of users) {
-        // The spatial grid gives nearby candidates cheaply; we still
-        // filter by actual distance for correctness.
         const nearbyIds = this.spatial.getNearby(roomId, me);
         const nearbyUsers = nearbyIds
           .map((id) => room.users.get(id)!)
           .filter(Boolean);
-
         const inRange: User[] = [];
         for (const other of nearbyUsers) {
           const d = calculateDistance(me, other);
           if (d <= PROXIMITY_THRESHOLD) inRange.push(other);
         }
-
         const nextSet = new Set(inRange.map((u) => u.id));
-        const prevSet = room.proximity.get(me.id) ?? new Set<string>();
+        const prevSet =
+          roomManager.getNearbyUsers(roomId, me.id) ?? new Set<string>();
         const { entered, left } = diffSets(prevSet, nextSet);
+        roomManager.setNearbyUsers(roomId, me.id, nextSet);
 
-        // Save
-        room.proximity.set(me.id, nextSet);
-
-        // Send one batched message with both positions + diff
         this.io.to(me.socketId).emit("room-sync", {
           ts: Date.now(),
-          me: { x: me.x, y: me.y },
-          players: nearbyUsers.map((u) => ({
-            id: u.id,
-            x: u.x,
-            y: u.y,
-            username: u.username,
-          })),
-          proximity: {
-            entered,
-            left,
-          },
-          audio: inRange.map((u) => {
-            const d = calculateDistance(me, u);
+          me: this.toTileCoords(me.x, me.y),
+          players: nearbyUsers.map((u) => {
+            const tileCoords = this.toTileCoords(u.x, u.y);
             return {
               id: u.id,
-              level: calculateAudioLevel(d),
+              x: tileCoords.x,
+              y: tileCoords.y,
+              username: u.username,
             };
+          }),
+          proximity: { entered, left },
+          audio: inRange.map((u) => {
+            const d = calculateDistance(me, u);
+            return { id: u.id, level: calculateAudioLevel(d) };
           }),
         });
       }
     }
   }
 
-  private ensureRoom(roomId: string) {
-    if (!this.rooms.has(roomId)) {
-      this.rooms.set(roomId, {
-        id: roomId,
-        users: new Map<string, User>(),
-        proximity: new Map<string, Set<string>>(),
-      });
-    }
+  private toPixels(tileX: number, tileY: number) {
+    return { x: tileX * TILE_SIZE, y: tileY * TILE_SIZE };
+  }
+
+  private toTileCoords(xPx: number, yPx: number) {
+    return { x: Math.floor(xPx / TILE_SIZE), y: Math.floor(yPx / TILE_SIZE) };
+  }
+
+  /**
+   * Centralized update that:
+   * - stores user in RoomManager (global map + room map)
+   * - converts tiles -> pixels
+   * - updates SpatialGrid
+   */
+  private applyUserPositionFromTiles(user: User, tileX: number, tileY: number) {
+    const { x, y } = this.toPixels(tileX, tileY);
+    user.x = x;
+    user.y = y;
+
+    // Ensure in RoomManager
+    roomManager.setUser(user.id, user);
+    roomManager.ensureRoom(user.roomId);
+    const roomUsers = roomManager.getRoomUsers(user.roomId);
+    roomUsers.set(user.id, user);
+
+    // Single, authoritative spatial update
+    this.spatial.addOrMove(user.roomId, user);
   }
 
   private initializeEvents() {
@@ -136,50 +141,69 @@ export default class webSocketService {
         // User joins a room
         socket.on(
           "join-room",
-          (data: { roomId: string; username: string }, callback) => {
-            console.log(data, callback);
+          async (data: { roomId: string; username: string }, callback) => {
             try {
               const { roomId, username } = data;
+              console.log(
+                "before join",
+                roomManager.getRoomsMap(),
+                roomManager.getUsersMap()
+              );
               const userId = socket.id;
               console.log("jooining", userId, roomId);
 
-              this.ensureRoom(roomId);
-              const room = this.rooms.get(roomId)!;
+              roomManager.ensureRoom(roomId);
 
+              const pixelX = 22 * TILE_SIZE;
+              const pixelY = 10 * TILE_SIZE;
+
+              // 1. Add to user store
               const user: User = {
                 id: userId,
                 username,
-                x: Math.random() * 800,
-                y: Math.random() * 600,
+                x: pixelX,
+                y: pixelY,
                 socketId: socket.id,
                 roomId,
                 isAudioEnabled: false,
                 isVideoEnabled: false,
               };
 
-              room.users.set(userId, user);
-              room.proximity.set(userId, new Set());
-              this.users.set(userId, user);
+              roomManager.addUserToRoom(roomId, user);
+              roomManager.setNearbyUsers(roomId, userId, new Set());
+              roomManager.setUser(userId, user);
 
               socket.join(roomId);
 
-              // spatial grid
               this.spatial.addOrMove(roomId, user);
 
-              // initial snapshot (no need to blast everyone)
-              const roomUsers = Array.from(room.users.values());
+              // converting users pixel positions to tiled coordinates
+              const roomUsers = Array.from(
+                roomManager.getRoomUsers(roomId).values()
+              ).map((user) => {
+                const tileX = Math.floor(user.x / TILE_SIZE);
+                const tileY = Math.floor(user.y / TILE_SIZE);
+
+                return {
+                  ...user,
+                  x: tileX,
+                  y: tileY,
+                };
+              });
+              console.log("roomUsers", roomUsers);
               socket.emit("room-users", roomUsers);
 
-              // notify others
-              socket.to(roomId).emit("user-joined", user);
+              // making the pixels to tile coordinates again
+              socket.to(roomId).emit("user-joined", { ...user, x: 22, y: 10 });
+              console.log(
+                "after",
+                roomManager.getRoomsMap(),
+                roomManager.getUsersMap()
+              );
 
-              callback({
-                success: true,
-              });
+              callback({ success: true });
             } catch (error) {
-              callback({
-                success: false,
-              });
+              callback({ success: false });
             }
           }
         );
@@ -194,14 +218,15 @@ export default class webSocketService {
           lastMoveAt = now;
 
           const userId = socket.id;
-          const user = this.users.get(userId);
+          const user = roomManager.getUser(userId);
           if (!user) return;
 
-          user.x = data.x;
-          user.y = data.y;
+          const pixelPosition = this.toPixels(data.x, data.y);
+          user.x = pixelPosition.x;
+          user.y = pixelPosition.y;
 
-          const room = this.rooms.get(user.roomId)!;
-          room.users.set(userId, user);
+          const room = roomManager.getRoomUsers(user.roomId)!;
+          room.set(userId, user);
 
           // spatial grid update
           this.spatial.addOrMove(user.roomId, user);
@@ -213,27 +238,20 @@ export default class webSocketService {
         socket.on(
           "media-state-changed",
           (data: { isAudioEnabled: boolean; isVideoEnabled: boolean }) => {
-            console.log("here");
             const { isAudioEnabled, isVideoEnabled } = data;
             const userId = socket.id;
 
-            if (this.users.has(userId)) {
-              const user = this.users.get(userId)!;
-              const room = this.rooms.get(user.roomId)!;
+            const user = roomManager.getUser(userId);
+            if (!user) return;
 
-              user.isAudioEnabled = isAudioEnabled;
-              user.isVideoEnabled = isVideoEnabled;
+            user.isAudioEnabled = isAudioEnabled;
+            user.isVideoEnabled = isVideoEnabled;
 
-              this.users.set(userId, user);
-              room.users.set(userId, user);
-                console.log("emitted media change",userId, user.roomId)
-              // Notify others in room
-              socket.to(user.roomId).emit("user-media-state-changed", {
-                userId,
-                isAudioEnabled,
-                isVideoEnabled,
-              });
-            }
+            socket.to(user.roomId).emit("user-media-state-changed", {
+              userId,
+              isAudioEnabled,
+              isVideoEnabled,
+            });
           }
         );
 
@@ -321,23 +339,26 @@ export default class webSocketService {
         //     }
         //   });
 
+        //@ts-ignore
+        socket.on("test", (data) => {
+          console.log("data", data);
+        });
         // Handle disconnect
         socket.on("disconnect", () => {
-          const user = this.users.get(socket.id);
+          const user = roomManager.getUser(socket.id);
+          console.log("doconnected", socket.id, user);
           if (!user) return;
 
-          const room = this.rooms.get(user.roomId);
-          if (room) {
-            room.users.delete(user.id);
-            room.proximity.delete(user.id);
-            this.spatial.remove(user.roomId, user.id);
+          const roomId = user.roomId;
+          roomManager.deleteUserFromRoom(socket.id, roomId);
+          this.spatial.remove(roomId, user.id);
 
-            socket.to(user.roomId).emit("user-left", user.id);
+          socket.to(roomId).emit("user-left", user.id);
 
-            // cleanup room if empty
-            if (room.users.size === 0) this.rooms.delete(user.roomId);
+          if (roomManager.getRoomUsers(roomId).size === 0) {
+            roomManager.getRoomsMap().delete(roomId);
           }
-          this.users.delete(user.id);
+          roomManager.deleteUser(socket.id);
         });
       }
     );

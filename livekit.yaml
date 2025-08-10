@@ -1,0 +1,26 @@
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  udp_port: 50010
+  udp_port_range: [50010, 50030]
+  use_external_ip: true
+  enable_loopback_candidate: true
+
+keys:
+  mykey: mysecret # ← Replace with secure secret
+
+logging:
+  level: info
+  json: false
+  report_stats: true
+  pion_level: warn
+
+room:
+  enabled_codecs:
+    - mime: audio/opus
+    - mime: video/VP8
+    - mime: video/H264
+  num_participants: 100
+  empty_timeout: 300
+  enable_remote_unmute: true

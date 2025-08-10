@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/httpservice/index.ts","./src/websocke/ws.ts","./src/lib/contants.ts","./src/lib/spatialgrid.ts","./src/lib/util.ts","./src/types/type.ts","./src/webrtc/index.ts"],"version":"5.8.3"}

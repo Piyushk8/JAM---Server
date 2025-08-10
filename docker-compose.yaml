@@ -1,0 +1,12 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: livekit-server
+    restart: unless-stopped
+    ports:
+      - "7880:7880"                           # HTTP API
+      - "7881:7881"                           # WebSocket (signaling)
+      - "50010-50030:50010-50030/udp"        # ICE UDP ports (safe range)
+      - "50010-50030:50010-50030/tcp"        # ICE TCP ports (optional)
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml     # Mount config file into container

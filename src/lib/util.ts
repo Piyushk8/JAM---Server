@@ -7,7 +7,7 @@ export const PROXIMITY_THRESHOLD = 150; // Distance for audio/video connection
 export const CHAT_RANGE = 200; // Distance for seeing chat messages
 export const AUDIO_FALLOFF_START = 100; // Distance where audio starts to fade
 export const AUDIO_FALLOFF_END = 200; // Distance where audio becomes silent
-
+export const TILE_SIZE = 32
 // Helper functions
 export const calculateDistance = (user1: User, user2: User): number => {
   return Math.sqrt(

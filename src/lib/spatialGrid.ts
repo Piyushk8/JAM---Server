@@ -1,4 +1,3 @@
-// spatialGrid.ts
 import { User } from "../types/type";
 
 type CellKey = string;
@@ -62,10 +61,17 @@ export class SpatialGrid {
     this.userCells.delete(userId);
   }
 
-  /** Return nearby userIds by looking at same & adjacent cells */
-  getNearby(roomId: string, user: User, radiusCells = 1): string[] {
+  /** 
+   * Return nearby userIds by looking at same & adjacent cells
+   * Automatically calculates the required radius based on proximity threshold
+   */
+  getNearby(roomId: string, user: User, proximityThreshold: number = 150): string[] {
     const roomGrid = this.grid.get(roomId);
     if (!roomGrid) return [];
+
+    // Calculate how many cells we need to check based on proximity threshold
+    // Add 1 to ensure we don't miss edge cases
+    const radiusCells = Math.ceil(proximityThreshold / this.cellSize) + 1;
 
     const cx = Math.floor(user.x / this.cellSize);
     const cy = Math.floor(user.y / this.cellSize);
@@ -83,9 +89,35 @@ export class SpatialGrid {
     result.delete(user.id);
     return Array.from(result);
   }
+
+  /** 
+   * Debug method to see grid state 
+   */
+  getGridInfo(roomId: string): { 
+    cellCount: number; 
+    userCount: number; 
+    cells: { [key: string]: string[] } 
+  } {
+    const roomGrid = this.grid.get(roomId);
+    if (!roomGrid) return { cellCount: 0, userCount: 0, cells: {} };
+
+    const cells: { [key: string]: string[] } = {};
+    let userCount = 0;
+
+    for (const [cellKey, userSet] of roomGrid.entries()) {
+      cells[cellKey] = Array.from(userSet);
+      userCount += userSet.size;
+    }
+
+    return {
+      cellCount: roomGrid.size,
+      userCount,
+      cells
+    };
+  }
 }
 
-// proximity.ts
+// proximity.ts - unchanged
 export function diffSets<T>(prev: Set<T>, next: Set<T>) {
   const entered: T[] = [];
   const left: T[] = [];
@@ -98,4 +130,3 @@ export function diffSets<T>(prev: Set<T>, next: Set<T>) {
   }
   return { entered, left };
 }
-
