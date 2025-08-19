@@ -1,21 +1,26 @@
-export interface userData{
-    id:string
-    username:string
-    x:number
-    y:number
-    socketId:string
-}
+import { Socket } from "socket.io";
 
-export interface User {
+export interface userData {
   id: string;
   username: string;
   x: number;
   y: number;
   socketId: string;
+}
+
+export type UserAvailabilityStatus = "idle" | "busy" | "away";
+
+export interface User {
+  id: string;
+  availability: UserAvailabilityStatus;
+  username: string;
+  x: number;
+  y: number;
+  socketId: string;
   roomId: string;
-  isAudioEnabled: boolean;
-  isVideoEnabled: boolean;
-  peerId?: string;
+  isAudioEnabled?: boolean;
+  isVideoEnabled?: boolean;
+  sprite: string | null;
 }
 
 export interface Room {
@@ -28,7 +33,7 @@ export interface ChatMessage {
   userId: string;
   username: string;
   message: string;
-  type: 'text' | 'emoji';
+  type: "text" | "emoji";
   timestamp: string;
   x: number;
   y: number;
@@ -60,8 +65,13 @@ export type RoomSyncPayload = {
   audio: Array<{ id: string; level: number }>;
 };
 
+export type ConversationUpdatePayload = {
+  conversationId: string;
+  joined: string;
+  left: string;
+};
 
-
+export type SocketType = Socket<ClientToServer | ServerToClient>;
 export type ServerToClient = {
   "room-users": (users: User[]) => void;
   "user-joined": (user: User) => void;
@@ -75,6 +85,8 @@ export type ServerToClient = {
   "message-received": (msg: ChatMessage) => void;
   "message-sent": (msg: ChatMessage) => void;
   "user-typing": (data: TypingUser) => void;
+  "incoming-invite": (data: { conversationId: string; from: string }) => void;
+  "conversation-updated": (data: ConversationUpdatePayload) => void;
 };
 
 export type ClientToServer = {
@@ -90,4 +102,13 @@ export type ClientToServer = {
   "send-message": (data: { message: string; type: "text" | "emoji" }) => void;
   "typing-start": () => void;
   "typing-stop": () => void;
+  "call:invite": ({ targetUserId }: { targetUserId: string }) => void;
+  userStatusChange: (data: { status: UserAvailabilityStatus }) => void;
+  "call:accept": ({
+    conversationId,
+    targetUserId,
+  }: {
+    conversationId: string;
+    targetUserId: string;
+  }) => void;
 };
