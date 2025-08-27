@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   pgEnum,
   PgEnumColumn,
@@ -7,37 +8,47 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 
-export const Users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull(),
-  email: text("email"),
-  avatar: text("avatar"),
-  createdAt: timestamp("created_at").defaultNow(),
-  lastSeen: timestamp("last_seen").defaultNow(),
-});
-export const roomUsers = pgTable("room_users", {
-  id: serial("id").primaryKey(),
-  roomId: integer("room_id").references(() => Rooms.id), // FK to rooms
-  userId: integer("user_id").references(() => Users.id), // FK to users
-  sessionId: text("session_id").notNull(),
-  isConnected: boolean("is_connected").default(false),
-  videoEnabled: boolean("video_enabled").default(true),
-  audioEnabled: boolean("audio_enabled").default(true),
-  lastActive: timestamp("last_active").defaultNow(),
-});
+export const Users = pgTable(
+  "users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    username: text("username").notNull().unique(),
+    email: text("email"),
+    password: text("password").notNull(),
+    avatar: text("avatar"),
+    createdAt: timestamp("created_at").defaultNow(),
+    lastSeen: timestamp("last_seen").defaultNow(),
+  },
+  (table) => [uniqueIndex("username_idx").on(table.username)]
+);
+
 export const videoQualityEnum = pgEnum("videoQuality", [
   "high",
   "low",
   "medium",
 ]);
-const Rooms = pgTable("rooms", {
-  id: serial("id").primaryKey(),
+
+export const Rooms = pgTable("rooms", {
+  id: uuid("id").defaultRandom().primaryKey(),
   name: text("room_name").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   liveKitRoomName: text("livekit_room_id").notNull(),
   maxParticipants: integer("max_Participants").notNull().default(20),
   videoQuality: videoQualityEnum().default("medium"),
+});
+
+export const RoomUsers = pgTable("room_users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  roomId: uuid("room_id").references(() => Rooms.id, { onDelete: "cascade" }), 
+  userId: uuid("user_id").references(() => Users.id, { onDelete: "cascade" }), 
+  sessionId: text("session_id").notNull(),
+  isConnected: boolean("is_connected").default(false),
+  videoEnabled: boolean("video_enabled").default(true),
+  audioEnabled: boolean("audio_enabled").default(true),
+  lastActive: timestamp("last_active").defaultNow(),
 });

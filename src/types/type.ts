@@ -106,7 +106,7 @@ export type ServerToClient = {
 
 export type ClientToServer = {
   "join-room": (
-    data: { roomId: string; username: string },
+    data: { roomId?: string; username: string; roomName?: string },
     cb: (res: { success: boolean }) => void
   ) => Promise<void>;
   "user-move": (data: { x: number; y: number }) => void;

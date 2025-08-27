@@ -4,6 +4,7 @@ import cors from "cors";
 import { AccessToken } from "livekit-server-sdk";
 import dotenv from "dotenv";
 import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET } from "../index";
+import { mainRouter } from "./Routers";
 dotenv.config();
 
 export default class httpService {
@@ -18,6 +19,7 @@ export default class httpService {
     this.app.get("/", (req, res) => {
       res.send("hiii");
     });
+    this.app.use("/api/v1",mainRouter)
 
     this.app.get("/getToken", async (req, res) => {
       const { room, identity } = req.query;

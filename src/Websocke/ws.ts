@@ -23,6 +23,8 @@ import { CELL_SIZE, FRONTEND_URL, TICK_RATE } from "../lib/contants";
 import roomManager from "../RoomManager";
 import { Conversation, conversationsManager } from "../ConversationRooms";
 import { randomUUID } from "crypto";
+import { checkRoomExists } from "../Helpers/user";
+import { db } from "../db/init";
 
 const PROXIMITY_THRESHOLD = 150;
 const CHAT_RANGE = 200;
@@ -62,7 +64,7 @@ export default class WebSocketService {
         origin: [
           "http://localhost:5173",
           "http://192.168.0.6:5173",
-          !FRONTEND_URL
+          !FRONTEND_URL,
         ],
         credentials: true,
       },
@@ -209,6 +211,7 @@ export default class WebSocketService {
   private initializeEvents(): void {
     this.io.on("connection", (socket) => {
       console.log("User connected:", socket.id);
+      // user creation on handshake
       this.setupSocketHandlers(socket);
     });
   }
@@ -236,31 +239,20 @@ export default class WebSocketService {
 
   private async handleJoinRoom(
     socket: Socket<ClientToServer, ServerToClient>,
-    data: { roomId: string; username: string },
+    data: { roomId?: string; username: string; roomName?: string },
     callback: (result: { success: boolean }) => void
   ): Promise<void> {
     try {
-      const { roomId, username } = data;
-      const userId = socket.id;
-
-      // console.log(`User ${userId} joining room ${roomId}`);
-      // console.log(
-      //   "Before join:",
-      //   roomManager.getRoomsMap(),
-      //   roomManager.getUsersMap()
-      // );
-
-      const user = this.createUser(userId, username, roomId, socket.id);
-      this.addUserToRoom(socket, roomId, user);
-
-      const roomUsersInTileCoords = this.getRoomUsersInTileCoords(roomId);
-
-      socket.emit("room-users", roomUsersInTileCoords);
-      socket.to(roomId).emit("user-joined", {
-        ...user,
-        x: DEFAULT_SPAWN_TILE.x,
-        y: DEFAULT_SPAWN_TILE.y,
-      });
+      // if
+      const { roomName, username, roomId } = data;
+      if (roomId && !roomName) {
+        const roomExists = await checkRoomExists(roomId);
+        // join room logic
+      } else if (roomName && !roomId) {
+        //create room logic
+      } else {
+        callback({ success: false });
+      }
 
       // console.log(
       //   "After join:",
@@ -572,8 +564,10 @@ export default class WebSocketService {
     roomManager.deleteUser(socketId);
   }
 
+
   public listen(port: number): void {
     this.httpServer.listen(port, "0.0.0.0", () => {
+      // Test database connection on startup
       console.log(`WebSocket server running on port ${port}`);
     });
   }
