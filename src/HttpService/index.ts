@@ -5,13 +5,25 @@ import { AccessToken } from "livekit-server-sdk";
 import dotenv from "dotenv";
 import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET } from "../index";
 import { mainRouter } from "./Routers";
+import cookieParser from "cookie-parser"
+import { FRONTEND_URL } from "../lib/contants";
 dotenv.config();
 
 export default class httpService {
   public app: Application;
   constructor() {
     this.app = express();
-    this.app.use(cors());
+    this.app.use(
+      cors({
+        origin: [
+          "http://localhost:5173",
+          "http://192.168.0.6:5173",
+          !FRONTEND_URL,
+        ],
+        credentials: true,
+      })
+    );
+    this.app.use(cookieParser())
     this.app.use(express.json());
     this.initializeApi();
   }
@@ -19,7 +31,7 @@ export default class httpService {
     this.app.get("/", (req, res) => {
       res.send("hiii");
     });
-    this.app.use("/api/v1",mainRouter)
+    this.app.use("/api/v1", mainRouter);
 
     this.app.get("/getToken", async (req, res) => {
       const { room, identity } = req.query;
@@ -52,9 +64,9 @@ export default class httpService {
     // });
     // this.app.get("/joinRoom", (req, res) => {
     //     try {
-          
+
     //           const { roomId, username } = req.body;
-              
+
     //           const userId = socket.id;
     //           console.log("jooining", userId, roomId);
 
@@ -92,12 +104,9 @@ export default class httpService {
     //             roomManager.getUsersMap()
     //           );
 
-            
-          
     //     } catch (error) {
-          
-    //     }
 
+    //     }
 
     // });
   };

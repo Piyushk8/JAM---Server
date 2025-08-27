@@ -18,6 +18,7 @@ import {
   User,
   UserAvailabilityStatus,
 } from "../types/type";
+import cookie from "cookie";
 import { diffSets, SpatialGrid } from "../lib/spatialGrid";
 import { CELL_SIZE, FRONTEND_URL, TICK_RATE } from "../lib/contants";
 import roomManager from "../RoomManager";
@@ -25,7 +26,8 @@ import { Conversation, conversationsManager } from "../ConversationRooms";
 import { randomUUID } from "crypto";
 import { checkRoomExists } from "../Helpers/user";
 import { db } from "../db/init";
-
+import jwt from "jsonwebtoken";
+import { parseCookiesWithQs } from "./cookieParser";
 const PROXIMITY_THRESHOLD = 150;
 const CHAT_RANGE = 200;
 const MOVE_LIMIT_MS = 33; // ~30Hz throttling
@@ -52,6 +54,30 @@ export default class WebSocketService {
 
     this.initializeEvents();
     this.startTick();
+
+    this.io.use((socket: Socket, next) => {
+      try {
+        const rawCookie = socket.handshake.headers.cookie;
+
+        if (!rawCookie) return next(new Error("No cookies found"));
+
+        const parsed = parseCookiesWithQs(rawCookie);
+
+        const { token } = parsed;
+        if (!token) throw new Error("No token in cookies");
+
+        const { userId, username } = jwt.verify(
+          token,
+          process.env.JWT_SECRET!
+        ) as { userId: string; username: string };
+        socket.data.userId = userId;
+        socket.data.username = username;
+        next();
+      } catch (err) {
+        console.error("Auth error:", err);
+        next(new Error("Authentication error"));
+      }
+    });
   }
 
   private createHttpServer(app: Application): HTTPServer {
@@ -210,8 +236,7 @@ export default class WebSocketService {
 
   private initializeEvents(): void {
     this.io.on("connection", (socket) => {
-      console.log("User connected:", socket.id);
-      // user creation on handshake
+      console.log("User connected:", socket.id, socket.data.userId);
       this.setupSocketHandlers(socket);
     });
   }
@@ -389,7 +414,6 @@ export default class WebSocketService {
         return;
       }
       const targetUserSocketId = roomManager.getUser(targetUserId)?.id;
-      // ✅ if inviting to existing conversation
       if (conversationId && targetUserSocketId) {
         const existingConversation =
           conversationsManager.getConversation(conversationId);
@@ -397,7 +421,7 @@ export default class WebSocketService {
         if (existingConversation) {
           this.io.to(targetUserSocketId).emit("incoming-invite", {
             conversationId: existingConversation.conversationId,
-            from: socket.id, //! ⚠️ ideally use socket.data.userId
+            from: socket.data.userId,
             members: existingConversation.members,
           });
 
@@ -405,9 +429,8 @@ export default class WebSocketService {
         }
       }
 
-      // ✅ otherwise, create a new conversation
       const newConversationId = randomUUID();
-      const creator = socket.id; //! ⚠️ should later swap for userId
+      const creator = socket.data.userId;
       const createdAt = Date.now();
 
       // tell target user
@@ -540,18 +563,18 @@ export default class WebSocketService {
   private handleDisconnect(
     socket: Socket<ClientToServer, ServerToClient>
   ): void {
-    const user = roomManager.getUser(socket.id);
-    console.log("User disconnected:", socket.id, user);
+    const user = roomManager.getUser(socket.data.userId);
+    console.log("User disconnected:", socket.data.userId, user);
 
     if (!user) return;
 
-    this.cleanupUserDisconnection(user, socket.id);
+    this.cleanupUserDisconnection(user, user.id);
   }
 
   private cleanupUserDisconnection(user: User, socketId: string): void {
     const roomId = user.roomId;
 
-    roomManager.deleteUserFromRoom(socketId, roomId);
+    roomManager.deleteUserFromRoom(user.id, roomId);
     this.spatial.remove(roomId, user.id);
 
     this.io.to(roomId).emit("user-left", user.id);
@@ -561,9 +584,8 @@ export default class WebSocketService {
       roomManager.getRoomsMap().delete(roomId);
     }
 
-    roomManager.deleteUser(socketId);
+    roomManager.deleteUser(user.id);
   }
-
 
   public listen(port: number): void {
     this.httpServer.listen(port, "0.0.0.0", () => {
