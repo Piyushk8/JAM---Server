@@ -1,4 +1,5 @@
 import { Socket } from "socket.io";
+import { Conversation } from "../ConversationRooms";
 
 export interface userData {
   id: string;
@@ -85,8 +86,22 @@ export type ServerToClient = {
   "message-received": (msg: ChatMessage) => void;
   "message-sent": (msg: ChatMessage) => void;
   "user-typing": (data: TypingUser) => void;
-  "incoming-invite": (data: { conversationId: string; from: string }) => void;
+  "incoming-invite": (data: {
+    conversationId: string;
+    from: string;
+    members: string[];
+  }) => void;
   "conversation-updated": (data: ConversationUpdatePayload) => void;
+  "call-declined": (data: {
+    conversationId: string;
+    userDeclined: string;
+  }) => void;
+
+  "call-accepted-response": (data: {
+    conversationId: string;
+    targetUserId: string;
+    conversation?: any;
+  }) => void;
 };
 
 export type ClientToServer = {
@@ -102,13 +117,40 @@ export type ClientToServer = {
   "send-message": (data: { message: string; type: "text" | "emoji" }) => void;
   "typing-start": () => void;
   "typing-stop": () => void;
-  "call:invite": ({ targetUserId }: { targetUserId: string }) => void;
+  "call:invite": (
+    { targetUserId }: { targetUserId: string },
+    callback: (res: { success: boolean; conversation: Conversation }) => void
+  ) => void;
   userStatusChange: (data: { status: UserAvailabilityStatus }) => void;
-  "call:accept": ({
+  "call:accept": (
+    {
+      conversationId,
+      targetUserId,
+      from,
+    }: {
+      conversationId: string;
+      targetUserId: string;
+      from: string;
+    },
+    cb: (res: {
+      isConversationActive: boolean;
+      conversation: Conversation | null;
+    }) => void
+  ) => void;
+
+  "call:decline": ({
     conversationId,
-    targetUserId,
+    userDeclined,
+    userThatInvited,
   }: {
     conversationId: string;
-    targetUserId: string;
+    userDeclined: string;
+    userThatInvited: string;
+  }) => void;
+
+  "leave-conversation": ({
+    conversationId,
+  }: {
+    conversationId: string;
   }) => void;
 };

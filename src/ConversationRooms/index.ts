@@ -1,12 +1,14 @@
 import { UUID } from "crypto";
 
-interface Conversation {
+export interface Conversation {
   roomId: string;
   members: string[];
   pending: string[];
   // type:"audio"| "video",
   conversationId: string;
   creator: string;
+  createdAt: number;
+  status: "ongoing" | "pending" | "ended";
 }
 class ConversationsManager {
   private conversations: Map<string, Conversation>;
@@ -35,12 +37,16 @@ class ConversationsManager {
     conversationId,
     creator,
     pending,
+    createdAt,
+    status,
   }: {
     pending: string[];
     members: string[];
     roomId: string;
     conversationId: UUID;
     creator: string;
+    createdAt: number;
+    status: "ongoing" | "pending" | "ended";
   }) {
     try {
       const conversation: Conversation = {
@@ -49,10 +55,13 @@ class ConversationsManager {
         creator,
         conversationId,
         pending,
+        createdAt,
+        status,
       };
       this.conversations.set(conversationId, conversation);
+      return conversation
     } catch (error) {
-        return 
+      return;
     }
   }
 }

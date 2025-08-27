@@ -19,9 +19,9 @@ import {
   UserAvailabilityStatus,
 } from "../types/type";
 import { diffSets, SpatialGrid } from "../lib/spatialGrid";
-import { CELL_SIZE, TICK_RATE } from "../lib/contants";
+import { CELL_SIZE, FRONTEND_URL, TICK_RATE } from "../lib/contants";
 import roomManager from "../RoomManager";
-import { conversationsManager } from "../ConversationRooms";
+import { Conversation, conversationsManager } from "../ConversationRooms";
 import { randomUUID } from "crypto";
 
 const PROXIMITY_THRESHOLD = 150;
@@ -59,7 +59,11 @@ export default class WebSocketService {
   private createSocketServer(): Server {
     return new Server<ClientToServer | ServerToClient>(this.httpServer, {
       cors: {
-        origin: "http://localhost:5173",
+        origin: [
+          "http://localhost:5173",
+          "http://192.168.0.6:5173",
+          !FRONTEND_URL
+        ],
         credentials: true,
       },
     });
@@ -223,7 +227,10 @@ export default class WebSocketService {
       this.handleUserAvailabilityChange(socket, data)
     );
     socket.on("call:invite", this.handleCallInvite.bind(this, socket));
-    socket.on("call:accept", (data) => this.handleAcceptCall(socket, data));
+    socket.on("call:accept", (data, cb) =>
+      this.handleAcceptCall(socket, data, cb)
+    );
+    socket.on("call:decline", (data) => this.handleDeclineCall(socket, data));
     socket.on("disconnect", () => this.handleDisconnect(socket));
   }
 
@@ -379,61 +386,163 @@ export default class WebSocketService {
 
   private handleCallInvite(
     socket: Socket,
-    data: { conversation?: any; targetUserId: string }
+    data: { conversationId?: string; targetUserId: string },
+    callback: (res: { success: boolean; conversation: Conversation }) => void
   ) {
-    // if conversationId -> invite to existing call
-    const { conversation, targetUserId } = data;
-    if (conversation) {
-    }
-    // if no conversationId create a fresh Conversation
-    const conversationId = randomUUID();
-    const creator = socket.id;
-    //? change with user ID
-    console.log("preparing to sent invite from server");
-    this.io.to(targetUserId).emit("incoming-invite", {
-      conversationId,
-      from: creator,
-    });
+    try {
+      const { conversationId, targetUserId } = data;
 
-    socket.join(conversationId);
-    conversationsManager.createConversation({
-      conversationId,
-      members: [creator],
-      pending: [targetUserId],
-      roomId: "",
-      creator: creator,
-    });
-    console.log(
-      "sent to target",
-      conversationsManager.getConversation(conversationId)
-    );
+      if (!targetUserId) {
+        console.warn("[call:Invite] targetUserId missing");
+        return;
+      }
+      const targetUserSocketId = roomManager.getUser(targetUserId)?.id;
+      // ✅ if inviting to existing conversation
+      if (conversationId && targetUserSocketId) {
+        const existingConversation =
+          conversationsManager.getConversation(conversationId);
+
+        if (existingConversation) {
+          this.io.to(targetUserSocketId).emit("incoming-invite", {
+            conversationId: existingConversation.conversationId,
+            from: socket.id, //! ⚠️ ideally use socket.data.userId
+            members: existingConversation.members,
+          });
+
+          return;
+        }
+      }
+
+      // ✅ otherwise, create a new conversation
+      const newConversationId = randomUUID();
+      const creator = socket.id; //! ⚠️ should later swap for userId
+      const createdAt = Date.now();
+
+      // tell target user
+      this.io.to(targetUserId).emit("incoming-invite", {
+        conversationId: newConversationId,
+        from: creator,
+        members: [creator],
+      });
+
+      // join the socket to the new "room"
+      socket.join(newConversationId);
+
+      // add to conversation manager
+      const conversation = conversationsManager.createConversation({
+        conversationId: newConversationId,
+        members: [creator],
+        pending: [targetUserId],
+        roomId: "", // if you have actual roomId, set it
+        creator,
+        createdAt,
+        status: "pending",
+      });
+
+      console.log(
+        "[call:Invite] new conversation created",
+        conversationsManager.getConversation(newConversationId)
+      );
+      if (!conversation) throw new Error("error creating conversation");
+      callback({ success: true, conversation });
+    } catch (error) {
+      console.error("[call:Invite] error:", error);
+    }
   }
   private handleAcceptCall(
     socket: Socket,
-    data: { conversationId: string; targetUserId: string }
+    data: { conversationId: string; targetUserId: string; from: string },
+    cb: (res: {
+      isConversationActive: boolean;
+      conversation: Conversation | null;
+    }) => void
   ) {
-    const { conversationId, targetUserId } = data;
+    try {
+      const { conversationId, targetUserId, from } = data;
 
-    const conversation = conversationsManager.getConversation(conversationId);
-    if (!conversation?.pending) return;
+      const conversation = conversationsManager.getConversation(conversationId);
+      if (!conversation?.pending) return;
+      // user that accepted the call
+      const targetUserSocketId = roomManager.getUser(targetUserId)?.id;
+      switch (conversation.status) {
+        // call is yet to be started
+        case "pending":
+          conversation.members.push(targetUserId);
+          conversation.pending = conversation.pending.filter(
+            (u) => u !== targetUserId
+          );
+          const userThatInvitedSocketId = roomManager.getUser(from)?.id;
+          socket.join(conversationId);
+          if (!userThatInvitedSocketId)
+            throw new Error("[call:accept]:no user socketId");
+          conversation.status = "ongoing";
+          this.io.to(userThatInvitedSocketId).emit("call-accepted-response", {
+            targetUserId,
+            conversationId,
+            conversation,
+          });
 
-    let left = [];
-    let joined = [];
-    // Add the accepting user to members
-    joined.push(targetUserId);
-    conversation.members.push(targetUserId);
+          cb({
+            conversation,
+            isConversationActive: conversation.status == "ongoing",
+          });
 
-    // Remove them from pending list
-    conversation.pending = conversation.pending.filter(
-      (u) => u !== targetUserId
-    );
+        // joining an on going call
+        case "ongoing":
+          // Add the accepting user to members
+          conversation.members.push(targetUserId);
 
-    socket.join(conversationId);
-    // Notify everyone in conversation that it’s updated
-    this.io.to(conversationId).emit("conversation-updated", {
-      conversationId,
-      joined,
-    });
+          // Remove them from pending list
+          conversation.pending = conversation.pending.filter(
+            (u) => u !== targetUserId
+          );
+
+          socket.join(conversationId);
+          // Notify everyone in conversation that it’s updated
+          this.io.to(conversationId).emit("conversation-updated", {
+            conversationId,
+            joined: [targetUserId],
+          });
+        case "ended":
+      }
+    } catch (error) {
+      console.log("[call:accept]", error);
+      cb({ conversation: null, isConversationActive: false });
+    }
+  }
+  private handleDeclineCall(
+    socket: Socket,
+    data: {
+      conversationId: string;
+      userDeclined: string;
+      userThatInvited: string;
+    }
+  ) {
+    try {
+      const { conversationId, userDeclined, userThatInvited } = data;
+      const conversation = conversationsManager.getConversation(conversationId);
+      if (!conversation?.pending) return;
+
+      let left = [];
+      // Add the accepting user to members
+      left = [userDeclined];
+
+      // Remove them from pending list
+      conversation.pending = conversation.pending.filter(
+        (u) => u !== userDeclined
+      );
+
+      const userThatInvitedSocketId = roomManager.getUser(userThatInvited)?.id;
+      if (!userThatInvitedSocketId)
+        throw new Error("[call:decline]- no userThatInvitedSocketId");
+      // Notify everyone in conversation that it’s updated
+      this.io.to(userThatInvitedSocketId).emit("call-declined", {
+        conversationId,
+        from: userDeclined,
+      });
+    } catch (error) {
+      console.log(error);
+    }
   }
 
   private handleDisconnect(
@@ -464,7 +573,7 @@ export default class WebSocketService {
   }
 
   public listen(port: number): void {
-    this.httpServer.listen(port, () => {
+    this.httpServer.listen(port, "0.0.0.0", () => {
       console.log(`WebSocket server running on port ${port}`);
     });
   }

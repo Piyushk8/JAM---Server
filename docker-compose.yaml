@@ -1,12 +1,16 @@
 services:
-  livekit:
-    image: livekit/livekit-server:latest
-    container_name: livekit-server
-    restart: unless-stopped
+  postgres:
+    image: postgres:latest
+    container_name: kumospace
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydb
     ports:
-      - "7880:7880"                           # HTTP API
-      - "7881:7881"                           # WebSocket (signaling)
-      - "50010-50030:50010-50030/udp"        # ICE UDP ports (safe range)
-      - "50010-50030:50010-50030/tcp"        # ICE TCP ports (optional)
+      - "5432:5432"
     volumes:
-      - ./livekit.yaml:/etc/livekit.yaml     # Mount config file into container
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:
