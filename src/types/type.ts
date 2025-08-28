@@ -12,7 +12,6 @@ export interface userData {
 
 export type UserAvailabilityStatus = "idle" | "busy" | "away";
 
-
 export interface User {
   id: string;
   availability: UserAvailabilityStatus;
@@ -32,24 +31,18 @@ export interface Room {
   id: string;
   users: Map<string, User>;
 }
-
 export interface ChatMessage {
   id: string;
   userId: string;
   username: string;
   message: string;
-  type: "text" | "emoji";
-  timestamp: string;
+  type: "text"|"emoji";
+  timestamp: number;
+  roomId:string,
   x: number;
   y: number;
+  distance?: number;
 }
-
-export interface TypingUser {
-  userId: string;
-  username: string;
-  isTyping: boolean;
-}
-
 export interface ProximityUser extends User {
   distance: number;
 }
@@ -89,7 +82,6 @@ export type ServerToClient = {
   }) => void;
   "message-received": (msg: ChatMessage) => void;
   "message-sent": (msg: ChatMessage) => void;
-  "user-typing": (data: TypingUser) => void;
   "incoming-invite": (data: {
     conversationId: string;
     from: string;
@@ -106,31 +98,34 @@ export type ServerToClient = {
     targetUserId: string;
     conversation?: any;
   }) => void;
+
+  "chat:message": (chatMessage: ChatMessage) => void;
+  "chat:startTyping":({userId,username}:{userId:string,username:string})=>void
+  "chat:stopTyping":({userId}:{userId:string})=>void
 };
-  export interface JoinRoomResponse{
-    user:{
-      userName:string,
-      userId:string,
-      sprite?:string,
-      availability:UserAvailabilityStatus
-    },
-    room:{
-      roomId:string,  
-    }
-    
-  }
+export interface JoinRoomResponse {
+  user: {
+    userName: string;
+    userId: string;
+    sprite?: string;
+    availability: UserAvailabilityStatus;
+  };
+  room: {
+    roomId: string;
+  };
+}
 
 export type ClientToServer = {
   "join-room": (
     data: { roomId?: string; roomName?: string },
-    cb: (res: { success: boolean, data?:JoinRoomResponse }) => void
+    cb: (res: { success: boolean; data?: JoinRoomResponse }) => void
   ) => Promise<void>;
   "user-move": (data: { x: number; y: number }) => void;
   "media-state-changed": (data: {
     isAudioEnabled: boolean;
     isVideoEnabled: boolean;
   }) => void;
-  "send-message": (data: { message: string; type: "text" | "emoji" }) => void;
+  // "send-message": (data: { message: string; type: "text" | "emoji" }) => void;
   "typing-start": () => void;
   "typing-stop": () => void;
   "call:invite": (
@@ -169,4 +164,16 @@ export type ClientToServer = {
   }: {
     conversationId: string;
   }) => void;
+
+  "chat:message": (chatMessage: ChatMessage) => void;
+  "chat:startTyping":({userId,username}:{userId:string,username:string})=>void
+  "chat:stopTyping":({userId}:{userId:string})=>void
 };
+
+export interface TypingUser {
+  userId: string;
+  username: string;
+  roomId: string;
+  x: number;
+  y: number;
+}

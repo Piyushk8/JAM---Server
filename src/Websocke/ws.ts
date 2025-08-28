@@ -5,6 +5,7 @@ import {
   AUDIO_FALLOFF_END,
   calculateAudioLevel,
   calculateDistance,
+  distance,
   getUsersInProximity,
   TILE_SIZE,
 } from "../lib/util";
@@ -102,6 +103,92 @@ export default class WebSocketService {
       },
     });
   }
+  private initializeEvents(): void {
+    this.io.on("connection", (socket) => {
+      console.log("User connected:", socket.id, socket.data.userId);
+      this.setupSocketHandlers(socket);
+    });
+  }
+
+  private setupSocketHandlers(
+    socket: Socket<ClientToServer, ServerToClient>
+  ): void {
+    socket.on("join-room", (data, callback) =>
+      this.handleJoinRoom(socket, data, callback)
+    );
+    socket.on("user-move", (data) => this.handleUserMove(socket, data));
+    socket.on("media-state-changed", (data) =>
+      this.handleMediaStateChange(socket, data)
+    );
+    socket.on("userStatusChange", (data) =>
+      this.handleUserAvailabilityChange(socket, data)
+    );
+    socket.on("call:invite", this.handleCallInvite.bind(this, socket));
+    socket.on("call:accept", (data, cb) =>
+      this.handleAcceptCall(socket, data, cb)
+    );
+    socket.on("call:decline", (data) => this.handleDeclineCall(socket, data));
+    socket.on("disconnect", () => this.handleDisconnect(socket));
+    socket.on("chat:message", (msg) => {
+      const sender = roomManager.getUser(msg.userId);
+      if (!sender) return;
+      // Find all users in same room & nearby
+      const nearbyUsers = Array.from(
+        roomManager.getRoomUsers(msg.roomId).values()
+      );
+      const nearby = nearbyUsers?.filter(
+        (u) => u.roomId === sender.roomId && distance(u, sender) < 300 // example threshold
+      );
+
+      // Send only to nearby users
+      nearby.forEach((u) => {
+        if (u.id === sender.id) return; // don't send back to sender
+        this.io.to(u.socketId).emit("chat:message", {
+          ...msg,
+          distance: distance(sender, u),
+        });
+      });
+    });
+    // typing.ts (inside your socket.io handlers)
+    socket.on("chat:startTyping", (data) => {
+      const sender = roomManager.getUser(data.userId);
+      if (!sender) return;
+
+      function distance(a: User, b: User) {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      // find nearby users
+      const nearbyUsers = Array.from(
+        roomManager.getRoomUsers(sender.roomId).values()
+      ).filter((u) => distance(u, sender) < 300 && u.id !== sender.id);
+
+      nearbyUsers.forEach((u) => {
+        this.io.to(u.socketId).emit("chat:typing", {
+          userId: sender.id,
+          username: sender.username,
+          roomId: sender.roomId,
+          x: sender.x,
+          y: sender.y,
+        });
+      });
+    });
+
+    socket.on("chat:stopTyping", (data) => {
+      const sender = roomManager.getUser(data.userId);
+      if (!sender) return;
+
+      const nearbyUsers = Array.from(
+        roomManager.getRoomUsers(sender.roomId).values()
+      ).filter((u) => distance(u, sender) < 300 && u.id !== sender.id);
+
+      nearbyUsers.forEach((u) => {
+        this.io.to(u.socketId).emit("chat:stopTyping", { userId: sender.id });
+      });
+    });
+  }
 
   private startTick(): void {
     const interval = 1000 / TICK_RATE;
@@ -128,6 +215,18 @@ export default class WebSocketService {
     }
   }
 
+  private emitRoomSync(user: User, nearbyUsers: User[], data: any): void {
+    const { proximityChanges, audioLevels } = data;
+    this.io.to(user.socketId).emit("room-sync", {
+      ts: Date.now(),
+      me: this.toTileCoords(user.x, user.y),
+      players: nearbyUsers.map(this.mapUserToTileCoords.bind(this)),
+      proximity: proximityChanges,
+      audio: audioLevels,
+    });
+  }
+
+  // ----------  PROCESSING HELPERS ---------
   private processAwayUsers(awayUsers: Map<string, AwayUsers>) {
     if (!awayUsers) return;
 
@@ -203,17 +302,6 @@ export default class WebSocketService {
     });
   }
 
-  private emitRoomSync(user: User, nearbyUsers: User[], data: any): void {
-    const { proximityChanges, audioLevels } = data;
-    this.io.to(user.socketId).emit("room-sync", {
-      ts: Date.now(),
-      me: this.toTileCoords(user.x, user.y),
-      players: nearbyUsers.map(this.mapUserToTileCoords.bind(this)),
-      proximity: proximityChanges,
-      audio: audioLevels,
-    });
-  }
-
   private mapUserToTileCoords(user: User): Partial<User> {
     const tileCoords = this.toTileCoords(user.x, user.y);
     return {
@@ -258,33 +346,7 @@ export default class WebSocketService {
     roomUsers.set(user.id, user);
   }
 
-  private initializeEvents(): void {
-    this.io.on("connection", (socket) => {
-      console.log("User connected:", socket.id, socket.data.userId);
-      this.setupSocketHandlers(socket);
-    });
-  }
-
-  private setupSocketHandlers(
-    socket: Socket<ClientToServer, ServerToClient>
-  ): void {
-    socket.on("join-room", (data, callback) =>
-      this.handleJoinRoom(socket, data, callback)
-    );
-    socket.on("user-move", (data) => this.handleUserMove(socket, data));
-    socket.on("media-state-changed", (data) =>
-      this.handleMediaStateChange(socket, data)
-    );
-    socket.on("userStatusChange", (data) =>
-      this.handleUserAvailabilityChange(socket, data)
-    );
-    socket.on("call:invite", this.handleCallInvite.bind(this, socket));
-    socket.on("call:accept", (data, cb) =>
-      this.handleAcceptCall(socket, data, cb)
-    );
-    socket.on("call:decline", (data) => this.handleDeclineCall(socket, data));
-    socket.on("disconnect", () => this.handleDisconnect(socket));
-  }
+  //  --------------  JOIN ROOM LOGIC ---------
 
   private async joinExistingRoom(
     socket: Socket<ClientToServer, ServerToClient>,
@@ -392,7 +454,7 @@ export default class WebSocketService {
     user.socketId = socketId;
     user.availability = "idle";
     roomManager.removeAwayUser(userId);
-    return user; 
+    return user;
   }
 
   private createUser(
@@ -438,6 +500,8 @@ export default class WebSocketService {
       })
     );
   }
+
+  // ------------  USER STATUS HANDLERS -------
 
   private handleUserMove(
     socket: Socket<ClientToServer, ServerToClient>,
@@ -505,6 +569,7 @@ export default class WebSocketService {
     }
   }
 
+  // -----------  CONVERSATION FLOW LOGIC ---------
   private handleCallInvite(
     socket: Socket,
     data: { conversationId?: string; targetUserId: string },
@@ -665,6 +730,7 @@ export default class WebSocketService {
     }
   }
 
+  /// ------------------     CLEAN UP LOGIC   ---
   private handleDisconnect(
     socket: Socket<ClientToServer, ServerToClient>
   ): void {
