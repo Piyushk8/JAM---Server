@@ -1,5 +1,6 @@
 import { Socket } from "socket.io";
 import { Conversation } from "../ConversationRooms";
+import { Users } from "../db/schema";
 
 export interface userData {
   id: string;
@@ -10,6 +11,7 @@ export interface userData {
 }
 
 export type UserAvailabilityStatus = "idle" | "busy" | "away";
+
 
 export interface User {
   id: string;
@@ -103,11 +105,23 @@ export type ServerToClient = {
     conversation?: any;
   }) => void;
 };
+  export interface JoinRoomResponse{
+    user:{
+      userName:string,
+      userId:string,
+      sprite?:string,
+      availability:UserAvailabilityStatus
+    },
+    room:{
+      roomId:string,  
+    }
+    
+  }
 
 export type ClientToServer = {
   "join-room": (
-    data: { roomId?: string; username: string; roomName?: string },
-    cb: (res: { success: boolean }) => void
+    data: { roomId?: string; roomName?: string },
+    cb: (res: { success: boolean, data?:JoinRoomResponse }) => void
   ) => Promise<void>;
   "user-move": (data: { x: number; y: number }) => void;
   "media-state-changed": (data: {

@@ -11,6 +11,7 @@ import {
 import {
   ChatMessage,
   ClientToServer,
+  JoinRoomResponse,
   ProximityUser,
   Room,
   RoomSyncPayload,
@@ -24,7 +25,12 @@ import { CELL_SIZE, FRONTEND_URL, TICK_RATE } from "../lib/contants";
 import roomManager from "../RoomManager";
 import { Conversation, conversationsManager } from "../ConversationRooms";
 import { randomUUID } from "crypto";
-import { checkRoomExists } from "../Helpers/user";
+import {
+  checkRoomExists,
+  createRoom,
+  getUserFromID,
+  joinRoom,
+} from "../Helpers/user";
 import { db } from "../db/init";
 import jwt from "jsonwebtoken";
 import { parseCookiesWithQs } from "./cookieParser";
@@ -264,27 +270,122 @@ export default class WebSocketService {
 
   private async handleJoinRoom(
     socket: Socket<ClientToServer, ServerToClient>,
-    data: { roomId?: string; username: string; roomName?: string },
-    callback: (result: { success: boolean }) => void
+    data: { roomId?: string; roomName?: string },
+    callback: (result: { success: boolean; data?: JoinRoomResponse }) => void
   ): Promise<void> {
     try {
-      // if
-      const { roomName, username, roomId } = data;
-      if (roomId && !roomName) {
-        const roomExists = await checkRoomExists(roomId);
-        // join room logic
-      } else if (roomName && !roomId) {
-        //create room logic
-      } else {
-        callback({ success: false });
-      }
+      console.log(
+        "before❌",
+        roomManager.getRoomsMap(),
+        roomManager.getUsersMap()
+      );
+      const userId = socket.data.userId;
+      const authUser = await getUserFromID(userId);
+      if (!authUser) throw new Error("auth user not found");
 
-      // console.log(
-      //   "After join:",
-      //   roomManager.getRoomsMap(),
-      //   roomManager.getUsersMap()
-      // );
-      callback({ success: true });
+      const { roomName, roomId } = data;
+      const { id, username } = authUser;
+
+      if (roomId && !roomName) {
+        // Join existing room logic
+        const roomExistsResult = await checkRoomExists(roomId);
+
+        if (!roomExistsResult.success || !roomExistsResult.exists) {
+          throw new Error("no room exists to join");
+        }
+
+        const { success, message, roomUser } = await joinRoom(
+          socket.data.userId,
+          roomId
+        );
+
+        if (!success || !roomUser) throw new Error("error joining room");
+
+        const user = this.createUser(userId, username, roomId, socket.id);
+        this.addUserToRoom(socket, roomId, user);
+
+        const roomUsersInTileCoords = this.getRoomUsersInTileCoords(roomId);
+        socket.emit("room-users", roomUsersInTileCoords);
+
+        socket.to(roomId).emit("user-joined", {
+          ...user,
+          x: DEFAULT_SPAWN_TILE.x,
+          y: DEFAULT_SPAWN_TILE.y,
+        });
+
+        console.log(
+          "after✅",
+          roomManager.getRoomsMap(),
+          roomManager.getUsersMap()
+        );
+        const room = roomManager.getRoomsMap().get(roomId);
+        const { username: userName, id, availability, socketId, sprite } = user;
+        callback({
+          success: true,
+          data: {
+            user: {
+              userId,
+              userName,
+              availability,
+              sprite: sprite ?? undefined,
+            },
+            room: {
+              roomId: room!.id,
+            },
+          },
+        });
+      } else if (roomName && !roomId) {
+        // Create new room logic
+        const { success, message, room } = await createRoom(roomName);
+        console.log("new Room", room);
+        if (!success || !room?.id) {
+          throw new Error("error creating room");
+        }
+
+        const {
+          success: userJoined,
+          message: userJoinedError,
+          roomUser,
+        } = await joinRoom(socket.data.userId, room.id);
+
+        if (!userJoined || !roomUser) throw new Error("error joining room");
+
+        const newRoomId = room.id;
+        const user = this.createUser(userId, username, newRoomId, socket.id);
+        this.addUserToRoom(socket, newRoomId, user);
+
+        const roomUsersInTileCoords = this.getRoomUsersInTileCoords(newRoomId);
+        socket.emit("room-users", roomUsersInTileCoords);
+
+        socket.to(newRoomId).emit("user-joined", {
+          ...user,
+          x: DEFAULT_SPAWN_TILE.x,
+          y: DEFAULT_SPAWN_TILE.y,
+        });
+        console.log(roomManager.getRoomsMap(), roomManager.getUsersMap());
+
+        const { username: userName, availability, sprite } = user;
+        callback({
+          success: true,
+          data: {
+            user: {
+              userId,
+              userName,
+              availability,
+              sprite: sprite ?? undefined,
+            },
+            room: {
+              roomId: room!.id,
+            },
+          },
+        });
+      } else if (roomId && roomName) {
+        // Both provided - could handle this case
+        throw new Error("provide either roomId or roomName, not both");
+      } else {
+        // Neither provided
+        throw new Error("must provide either roomId or roomName");
+      }
     } catch (error) {
       console.error("Error in join-room:", error);
       callback({ success: false });
@@ -342,7 +443,7 @@ export default class WebSocketService {
     // Throttling logic moved to a separate method
     if (!this.shouldProcessMove(socket)) return;
 
-    const user = roomManager.getUser(socket.id);
+    const user = roomManager.getUser(socket.data.userId);
     if (!user) return;
 
     this.updateUserMovement(user, data.x, data.y);
@@ -413,7 +514,7 @@ export default class WebSocketService {
         console.warn("[call:Invite] targetUserId missing");
         return;
       }
-      const targetUserSocketId = roomManager.getUser(targetUserId)?.id;
+      const targetUserSocketId = roomManager.getUser(targetUserId)?.socketId;
       if (conversationId && targetUserSocketId) {
         const existingConversation =
           conversationsManager.getConversation(conversationId);
@@ -432,9 +533,9 @@ export default class WebSocketService {
       const newConversationId = randomUUID();
       const creator = socket.data.userId;
       const createdAt = Date.now();
-
+      if (!targetUserSocketId) return;
       // tell target user
-      this.io.to(targetUserId).emit("incoming-invite", {
+      this.io.to(targetUserSocketId).emit("incoming-invite", {
         conversationId: newConversationId,
         from: creator,
         members: [creator],
@@ -478,7 +579,7 @@ export default class WebSocketService {
       const conversation = conversationsManager.getConversation(conversationId);
       if (!conversation?.pending) return;
       // user that accepted the call
-      const targetUserSocketId = roomManager.getUser(targetUserId)?.id;
+      const targetUserSocketId = roomManager.getUser(targetUserId)?.socketId;
       switch (conversation.status) {
         // call is yet to be started
         case "pending":
@@ -486,7 +587,7 @@ export default class WebSocketService {
           conversation.pending = conversation.pending.filter(
             (u) => u !== targetUserId
           );
-          const userThatInvitedSocketId = roomManager.getUser(from)?.id;
+          const userThatInvitedSocketId = roomManager.getUser(from)?.socketId;
           socket.join(conversationId);
           if (!userThatInvitedSocketId)
             throw new Error("[call:accept]:no user socketId");
@@ -547,7 +648,8 @@ export default class WebSocketService {
         (u) => u !== userDeclined
       );
 
-      const userThatInvitedSocketId = roomManager.getUser(userThatInvited)?.id;
+      const userThatInvitedSocketId =
+        roomManager.getUser(userThatInvited)?.socketId;
       if (!userThatInvitedSocketId)
         throw new Error("[call:decline]- no userThatInvitedSocketId");
       // Notify everyone in conversation that it’s updated
