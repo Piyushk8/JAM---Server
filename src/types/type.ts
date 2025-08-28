@@ -19,6 +19,8 @@ export interface User {
   username: string;
   x: number;
   y: number;
+  renderX?: number;
+  renderY?: number;
   socketId: string;
   roomId: string;
   isAudioEnabled?: boolean;

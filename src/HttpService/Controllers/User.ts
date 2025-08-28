@@ -55,11 +55,9 @@ export const userSignIn = async (
         success: false,
         message: "username or password not passed",
       });
-    console.log(username, password, typeof password);
     const user = await db.query.Users.findFirst({
       where: eq(Users.username, username),
     });
-    console.log("signin ", user);
     if (!user) {
       return res.status(404).json({
         message: "username or password not provided",
@@ -73,7 +71,7 @@ export const userSignIn = async (
       });
     if (!JWT_SECRET) throw new Error("no jwt secret found");
     const token = jwt.sign({ id: 1, username, userId: user.id }, JWT_SECRET, {
-      expiresIn: "15m",
+      expiresIn: "24h",
     });
 
     res.cookie("token", token, {

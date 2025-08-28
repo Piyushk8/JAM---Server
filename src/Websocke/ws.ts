@@ -22,7 +22,7 @@ import {
 import cookie from "cookie";
 import { diffSets, SpatialGrid } from "../lib/spatialGrid";
 import { CELL_SIZE, FRONTEND_URL, TICK_RATE } from "../lib/contants";
-import roomManager from "../RoomManager";
+import roomManager, { AwayUsers } from "../RoomManager";
 import { Conversation, conversationsManager } from "../ConversationRooms";
 import { randomUUID } from "crypto";
 import {
@@ -38,7 +38,7 @@ const PROXIMITY_THRESHOLD = 150;
 const CHAT_RANGE = 200;
 const MOVE_LIMIT_MS = 33; // ~30Hz throttling
 const DEFAULT_SPAWN_TILE = { x: 22, y: 10 };
-
+const GRACE_PERIOD = 5 * 60 * 1000;
 export type RoomRuntimeState = {
   id: string;
   users: Map<string, User>;
@@ -121,8 +121,26 @@ export default class WebSocketService {
     for (const [roomId, room] of rooms) {
       this.processRoomTick(roomId, room);
     }
+
+    const awayUsers = roomManager.getAwayUsers();
+    if (awayUsers) {
+      this.processAwayUsers(awayUsers);
+    }
   }
 
+  private processAwayUsers(awayUsers: Map<string, AwayUsers>) {
+    if (!awayUsers) return;
+
+    awayUsers.forEach((userInfo, userId) => {
+      if (Date.now() - userInfo.awaySince > GRACE_PERIOD) {
+        const user = roomManager.getUser(userId);
+        if (user) {
+          this.cleanupUserDisconnection(user);
+        }
+        roomManager.awayUserDisconncted(userId);
+      }
+    });
+  }
   private processRoomTick(roomId: string, room: RoomRuntimeState): void {
     const users = Array.from(room.users.values());
 
@@ -268,128 +286,113 @@ export default class WebSocketService {
     socket.on("disconnect", () => this.handleDisconnect(socket));
   }
 
+  private async joinExistingRoom(
+    socket: Socket<ClientToServer, ServerToClient>,
+    roomId: string,
+    userId: string,
+    username: string
+  ) {
+    const roomExists = await checkRoomExists(roomId);
+    if (!roomExists.success || !roomExists.exists)
+      throw new Error("Room does not exist");
+
+    const reconnectingUser = this.tryReconnection(userId, socket.id);
+    if (reconnectingUser) {
+      socket.join(roomId);
+      socket.emit("room-users", this.getRoomUsersInTileCoords(roomId));
+      return reconnectingUser;
+    }
+
+    const user = this.createUser(userId, username, roomId, socket.id);
+    this.addUserToRoom(socket, roomId, user);
+    socket.to(roomId).emit("user-joined", { ...user, ...DEFAULT_SPAWN_TILE });
+    return user;
+  }
+
+  private async createAndJoinRoom(
+    socket: Socket<ClientToServer, ServerToClient>,
+    roomName: string,
+    userId: string,
+    username: string
+  ) {
+    const { success, room } = await createRoom(roomName);
+    if (!success || !room?.id) throw new Error("Error creating room");
+
+    const user = this.createUser(userId, username, room.id, socket.id);
+    this.addUserToRoom(socket, room.id, user);
+
+    socket.join(room.id);
+    socket.emit("room-users", this.getRoomUsersInTileCoords(room.id));
+    socket.to(room.id).emit("user-joined", { ...user, ...DEFAULT_SPAWN_TILE });
+
+    return { user, roomId: room.id };
+  }
+
   private async handleJoinRoom(
     socket: Socket<ClientToServer, ServerToClient>,
     data: { roomId?: string; roomName?: string },
     callback: (result: { success: boolean; data?: JoinRoomResponse }) => void
-  ): Promise<void> {
+  ) {
     try {
-      console.log(
-        "before❌",
-        roomManager.getRoomsMap(),
-        roomManager.getUsersMap()
-      );
       const userId = socket.data.userId;
       const authUser = await getUserFromID(userId);
-      if (!authUser) throw new Error("auth user not found");
+      if (!authUser) throw new Error("Auth user not found");
 
-      const { roomName, roomId } = data;
       const { id, username } = authUser;
+      let user: User;
+      let roomId: string;
 
-      if (roomId && !roomName) {
-        // Join existing room logic
-        const roomExistsResult = await checkRoomExists(roomId);
-
-        if (!roomExistsResult.success || !roomExistsResult.exists) {
-          throw new Error("no room exists to join");
-        }
-
-        const { success, message, roomUser } = await joinRoom(
-          socket.data.userId,
-          roomId
+      if (data.roomId && !data.roomName) {
+        user = await this.joinExistingRoom(
+          socket,
+          data.roomId,
+          userId,
+          username
         );
-
-        if (!success || !roomUser) throw new Error("error joining room");
-
-        const user = this.createUser(userId, username, roomId, socket.id);
-        this.addUserToRoom(socket, roomId, user);
-
-        const roomUsersInTileCoords = this.getRoomUsersInTileCoords(roomId);
-        socket.emit("room-users", roomUsersInTileCoords);
-
-        socket.to(roomId).emit("user-joined", {
-          ...user,
-          x: DEFAULT_SPAWN_TILE.x,
-          y: DEFAULT_SPAWN_TILE.y,
-        });
-
-        console.log(
-          "after✅",
-          roomManager.getRoomsMap(),
-          roomManager.getUsersMap()
+        roomId = data.roomId;
+      } else if (data.roomName && !data.roomId) {
+        const result = await this.createAndJoinRoom(
+          socket,
+          data.roomName,
+          userId,
+          username
         );
-        const room = roomManager.getRoomsMap().get(roomId);
-        const { username: userName, id, availability, socketId, sprite } = user;
-        callback({
-          success: true,
-          data: {
-            user: {
-              userId,
-              userName,
-              availability,
-              sprite: sprite ?? undefined,
-            },
-            room: {
-              roomId: room!.id,
-            },
-          },
-        });
-      } else if (roomName && !roomId) {
-        // Create new room logic
-        const { success, message, room } = await createRoom(roomName);
-        console.log("new Room", room);
-        if (!success || !room?.id) {
-          throw new Error("error creating room");
-        }
-
-        const {
-          success: userJoined,
-          message: userJoinedError,
-          roomUser,
-        } = await joinRoom(socket.data.userId, room.id);
-
-        if (!userJoined || !roomUser) throw new Error("error joining room");
-
-        const newRoomId = room.id;
-        const user = this.createUser(userId, username, newRoomId, socket.id);
-        this.addUserToRoom(socket, newRoomId, user);
-
-        const roomUsersInTileCoords = this.getRoomUsersInTileCoords(newRoomId);
-        socket.emit("room-users", roomUsersInTileCoords);
-
-        socket.to(newRoomId).emit("user-joined", {
-          ...user,
-          x: DEFAULT_SPAWN_TILE.x,
-          y: DEFAULT_SPAWN_TILE.y,
-        });
-        console.log(roomManager.getRoomsMap(), roomManager.getUsersMap());
-
-        const { username: userName, availability, sprite } = user;
-        callback({
-          success: true,
-          data: {
-            user: {
-              userId,
-              userName,
-              availability,
-              sprite: sprite ?? undefined,
-            },
-            room: {
-              roomId: room!.id,
-            },
-          },
-        });
-      } else if (roomId && roomName) {
-        // Both provided - could handle this case
-        throw new Error("provide either roomId or roomName, not both");
+        user = result.user;
+        roomId = result.roomId;
       } else {
-        // Neither provided
-        throw new Error("must provide either roomId or roomName");
+        throw new Error("Provide either roomId or roomName, not both");
       }
+
+      callback({
+        success: true,
+        data: {
+          user: {
+            userId,
+            userName: username,
+            availability: user.availability,
+            sprite: user.sprite ?? undefined,
+          },
+          room: { roomId },
+        },
+      });
     } catch (error) {
       console.error("Error in join-room:", error);
       callback({ success: false });
     }
+  }
+
+  private tryReconnection(userId: string, socketId: string) {
+    const user = roomManager.getUser(userId);
+    if (!user) return false; // no previous user state
+
+    const awayInfo = roomManager.getAwayUser(userId);
+    if (!awayInfo) return false; // user wasn’t marked away
+
+    // Re-associate user with new socket
+    user.socketId = socketId;
+    user.availability = "idle";
+    roomManager.removeAwayUser(userId);
+    return user; 
   }
 
   private createUser(
@@ -496,7 +499,7 @@ export default class WebSocketService {
     socket: Socket,
     data: { status: UserAvailabilityStatus }
   ) {
-    const user = roomManager.getUser(socket.id);
+    const user = roomManager.getUser(socket.data.userId);
     if (user) {
       user.availability = data.status;
     }
@@ -667,13 +670,12 @@ export default class WebSocketService {
   ): void {
     const user = roomManager.getUser(socket.data.userId);
     console.log("User disconnected:", socket.data.userId, user);
-
     if (!user) return;
-
-    this.cleanupUserDisconnection(user, user.id);
+    roomManager.setAwayUser(user.roomId, user.id);
+    // this.cleanupUserDisconnection(user, user.id);
   }
 
-  private cleanupUserDisconnection(user: User, socketId: string): void {
+  private cleanupUserDisconnection(user: User): void {
     const roomId = user.roomId;
 
     roomManager.deleteUserFromRoom(user.id, roomId);

@@ -4,7 +4,6 @@ import { Rooms, RoomUsers, Users } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { Room } from "livekit-server-sdk";
 
-// Create new user
 export const createUser = async (username: string, password: string) => {
   const [user] = await db
     .insert(Users)
