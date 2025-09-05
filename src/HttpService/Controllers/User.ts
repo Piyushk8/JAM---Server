@@ -53,7 +53,7 @@ export const userSignIn = async (
     if (!username || !password)
       return res.json({
         success: false,
-        message: "username or password not passed",
+        message: "username or password not provided",
       });
     const user = await db.query.Users.findFirst({
       where: eq(Users.username, username),
@@ -66,7 +66,7 @@ export const userSignIn = async (
     }
     if (user.password != password)
       return res.status(404).json({
-        message: "password invalid",
+        message: "Invalid Password.",
         success: false,
       });
     if (!JWT_SECRET) throw new Error("no jwt secret found");
@@ -86,7 +86,7 @@ export const userSignIn = async (
   } catch (error) {
     console.log("signIn:error", error);
     res.status(404).json({
-      message: "error logging in",
+      message: "Login failed!, please try again later.",
       success: false,
     });
   }
@@ -142,12 +142,13 @@ export const userSignUp = async (
     return res.status(201).json({
       success: true,
       data: inserted[0],
+      message:"user created!"
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message:
-        error instanceof Error ? error.message : "Unexpected error signing up",
+      message: "SignUp failed!, please try again later."
+
     });
   }
 };

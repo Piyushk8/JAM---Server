@@ -1,6 +1,5 @@
 import { Socket } from "socket.io";
 import { Conversation } from "../ConversationRooms";
-import { Users } from "../ConversationRooms/db/schema";
 
 export interface userData {
   id: string;
