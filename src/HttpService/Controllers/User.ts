@@ -60,7 +60,7 @@ export const userSignIn = async (
     });
     if (!user) {
       return res.status(404).json({
-        message: "username or password not provided",
+        message: "User does not exist !",
         success: false,
       });
     }
