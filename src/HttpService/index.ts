@@ -18,7 +18,7 @@ export default class httpService {
         origin: [
           "http://localhost:5173",
           "http://192.168.0.6:5173",
-          !FRONTEND_URL,
+          FRONTEND_URL || "http://localhost:5173",
         ],
         credentials: true,
       })
