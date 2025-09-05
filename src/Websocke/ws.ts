@@ -92,12 +92,13 @@ export default class WebSocketService {
   }
 
   private createSocketServer(): Server {
+    if (!FRONTEND_URL) {
+      console.log("no frontend url found")
+    }
     return new Server<ClientToServer | ServerToClient>(this.httpServer, {
       cors: {
         origin: [
-          "http://localhost:5173",
-          "http://192.168.0.6:5173",
-          !FRONTEND_URL,
+          FRONTEND_URL || "http://localhost:5173",
         ],
         credentials: true,
       },
