@@ -32,7 +32,7 @@ import {
   getUserFromID,
   joinRoom,
 } from "../Helpers/user";
-import { db } from "../db/init";
+import { db } from "../ConversationRooms/db/init";
 import jwt from "jsonwebtoken";
 import { parseCookiesWithQs } from "./cookieParser";
 const PROXIMITY_THRESHOLD = 150;
@@ -709,7 +709,7 @@ export default class WebSocketService {
 
       let left = [];
       // Add the accepting user to members
-      left = [userDeclined];
+      // left = [userDeclined];
 
       // Remove them from pending list
       conversation.pending = conversation.pending.filter(

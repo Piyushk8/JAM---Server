@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
-import { db } from "../db/init";
-import { Rooms, RoomUsers, Users } from "../db/schema";
+import { db } from "../ConversationRooms/db/init";
+import { Rooms, RoomUsers, Users } from "../ConversationRooms/db/schema";
 import { eq } from "drizzle-orm";
 import { Room } from "livekit-server-sdk";
 

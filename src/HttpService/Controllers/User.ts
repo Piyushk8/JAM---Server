@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import { Users } from "../../db/schema";
-import { db } from "../../db/init";
+import { Users } from "../../ConversationRooms/db/schema";
+import { db } from "../../ConversationRooms/db/init";
 import { eq } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../../lib/contants";
