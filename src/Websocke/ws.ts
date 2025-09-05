@@ -93,13 +93,14 @@ export default class WebSocketService {
 
   private createSocketServer(): Server {
     if (!FRONTEND_URL) {
-      console.log("no frontend url found")
+      console.warn("⚠️ FRONTEND_URL not set, falling back to localhost");
     }
+    const allowedOrigins = FRONTEND_URL
+      ? [FRONTEND_URL]
+      : ["http://localhost:5173"];
     return new Server<ClientToServer | ServerToClient>(this.httpServer, {
       cors: {
-        origin: [
-          FRONTEND_URL || "http://localhost:5173",
-        ],
+        origin: allowedOrigins,
         credentials: true,
       },
     });

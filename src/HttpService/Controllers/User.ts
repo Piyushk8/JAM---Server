@@ -77,7 +77,7 @@ export const userSignIn = async (
     res.cookie("token", token, {
       httpOnly: true,
       secure: true,
-      sameSite: "lax",
+      sameSite: "none",
     });
     return res.status(200).json({
       success: true,
@@ -137,7 +137,7 @@ export const userSignUp = async (
     res.cookie("token", token, {
       httpOnly: true,
       secure: true,
-      sameSite: "lax",
+      sameSite: "none",
     });
     return res.status(201).json({
       success: true,
