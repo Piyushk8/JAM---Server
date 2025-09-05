@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
-import { Users } from "../../ConversationRooms/db/schema";
-import { db } from "../../ConversationRooms/db/init";
 import { eq } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../../lib/contants";
 import { AuthRequest } from "../authMiddleware";
+import { Users } from "../../db/schema";
+import { db } from "../../db/init";
 type ApiResponse<T> = {
   success: boolean;
   message?: string;

@@ -1,5 +1,3 @@
-
-import { db } from './ConversationRooms/db/init';
 import httpService from './HttpService';
 import webSocketService from './Websocke/ws';
 import dotenv from "dotenv";

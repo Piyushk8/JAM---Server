@@ -32,7 +32,6 @@ import {
   getUserFromID,
   joinRoom,
 } from "../Helpers/user";
-import { db } from "../ConversationRooms/db/init";
 import jwt from "jsonwebtoken";
 import { parseCookiesWithQs } from "./cookieParser";
 const PROXIMITY_THRESHOLD = 150;
@@ -95,12 +94,16 @@ export default class WebSocketService {
     if (!FRONTEND_URL) {
       console.warn("⚠️ FRONTEND_URL not set, falling back to localhost");
     }
-    const allowedOrigins = FRONTEND_URL
-      ? [FRONTEND_URL]
-      : ["http://localhost:5173"];
+    const allowedOrigins = ["http://localhost:5173", FRONTEND_URL];
     return new Server<ClientToServer | ServerToClient>(this.httpServer, {
       cors: {
-        origin: allowedOrigins,
+        origin: (origin, callback) => {
+          if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+          } else {
+            callback(new Error("Not allowed by CORS"));
+          }
+        },
         credentials: true,
       },
     });
@@ -139,7 +142,7 @@ export default class WebSocketService {
         roomManager.getRoomUsers(msg.roomId).values()
       );
       const nearby = nearbyUsers?.filter(
-        (u) => u.roomId === sender.roomId && distance(u, sender) < 300 // example threshold
+        (u) => u.roomId === sender.roomId && distance(u, sender) < 300
       );
 
       // Send only to nearby users
@@ -151,7 +154,7 @@ export default class WebSocketService {
         });
       });
     });
-    // typing.ts (inside your socket.io handlers)
+
     socket.on("chat:startTyping", (data) => {
       const sender = roomManager.getUser(data.userId);
       if (!sender) return;
@@ -162,7 +165,6 @@ export default class WebSocketService {
         return Math.sqrt(dx * dx + dy * dy);
       }
 
-      // find nearby users
       const nearbyUsers = Array.from(
         roomManager.getRoomUsers(sender.roomId).values()
       ).filter((u) => distance(u, sender) < 300 && u.id !== sender.id);

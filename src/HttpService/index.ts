@@ -12,11 +12,11 @@ dotenv.config();
 export default class httpService {
   public app: Application;
   constructor() {
-    console.log("htt",FRONTEND_URL)
+    const allowedOrigins = ["http://localhost:5173", FRONTEND_URL!];
     this.app = express();
     this.app.use(
       cors({
-       origin: FRONTEND_URL ? [FRONTEND_URL] : ["http://localhost:5173"],
+        origin: allowedOrigins,
         credentials: true,
       })
     );
