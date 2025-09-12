@@ -61,7 +61,6 @@ class RoomManager {
   }
 
   public addUserToRoom(roomId: string, user: User): void {
-    console.log("adding user to room", roomId, user);
     this.ensureRoom(roomId);
     this.rooms.get(roomId)!.users.set(user.id, user);
   }

@@ -17,6 +17,7 @@ import {
   Room,
   RoomSyncPayload,
   ServerToClient,
+  SpriteNames,
   User,
   UserAvailabilityStatus,
 } from "../types/type";
@@ -121,6 +122,9 @@ export default class WebSocketService {
     socket.on("join-room", (data, callback) =>
       this.handleJoinRoom(socket, data, callback)
     );
+    socket.on("reconnect:room", (data, cb) =>
+      this.handleReconnection(socket, data, cb)
+    );
     socket.on("user-move", (data) => this.handleUserMove(socket, data));
     socket.on("media-state-changed", (data) =>
       this.handleMediaStateChange(socket, data)
@@ -182,10 +186,10 @@ export default class WebSocketService {
 
     socket.on("chat:stopTyping", (data) => {
       const sender = roomManager.getUser(data.userId);
-      if (!sender) return;
+      if (!sender?.roomId) return;
 
       const nearbyUsers = Array.from(
-        roomManager.getRoomUsers(sender.roomId).values()
+        roomManager.getRoomUsers(sender?.roomId).values()
       ).filter((u) => distance(u, sender) < 300 && u.id !== sender.id);
 
       nearbyUsers.forEach((u) => {
@@ -356,7 +360,8 @@ export default class WebSocketService {
     socket: Socket<ClientToServer, ServerToClient>,
     roomId: string,
     userId: string,
-    username: string
+    username: string,
+    sprite: SpriteNames
   ) {
     const roomExists = await checkRoomExists(roomId);
     if (!roomExists.success || !roomExists.exists)
@@ -369,7 +374,7 @@ export default class WebSocketService {
       return reconnectingUser;
     }
 
-    const user = this.createUser(userId, username, roomId, socket.id);
+    const user = this.createUser(userId, username, roomId, socket.id, sprite);
     this.addUserToRoom(socket, roomId, user);
     socket.to(roomId).emit("user-joined", { ...user, ...DEFAULT_SPAWN_TILE });
     return user;
@@ -379,12 +384,14 @@ export default class WebSocketService {
     socket: Socket<ClientToServer, ServerToClient>,
     roomName: string,
     userId: string,
-    username: string
+    username: string,
+    sprite: SpriteNames
   ) {
     const { success, room } = await createRoom(roomName);
     if (!success || !room?.id) throw new Error("Error creating room");
 
-    const user = this.createUser(userId, username, room.id, socket.id);
+    const user = this.createUser(userId, username, room.id, socket.id, sprite);
+
     this.addUserToRoom(socket, room.id, user);
 
     socket.join(room.id);
@@ -396,7 +403,7 @@ export default class WebSocketService {
 
   private async handleJoinRoom(
     socket: Socket<ClientToServer, ServerToClient>,
-    data: { roomId?: string; roomName?: string },
+    data: { roomId?: string; roomName?: string; sprite: SpriteNames },
     callback: (result: { success: boolean; data?: JoinRoomResponse }) => void
   ) {
     try {
@@ -413,22 +420,25 @@ export default class WebSocketService {
           socket,
           data.roomId,
           userId,
-          username
+          username,
+          data.sprite
         );
         roomId = data.roomId;
       } else if (data.roomName && !data.roomId) {
+        console.log("before", data.sprite);
         const result = await this.createAndJoinRoom(
           socket,
           data.roomName,
           userId,
-          username
+          username,
+          data.sprite
         );
+        console.log("after", result.user);
         user = result.user;
         roomId = result.roomId;
       } else {
         throw new Error("Provide either roomId or roomName, not both");
       }
-
       callback({
         success: true,
         data: {
@@ -436,7 +446,7 @@ export default class WebSocketService {
             userId,
             userName: username,
             availability: user.availability,
-            sprite: user.sprite ?? undefined,
+            sprite: user.sprite,
           },
           room: { roomId },
         },
@@ -444,6 +454,56 @@ export default class WebSocketService {
     } catch (error) {
       console.error("Error in join-room:", error);
       callback({ success: false });
+    }
+  }
+
+  private async handleReconnection(
+    socket: Socket<ClientToServer, ServerToClient>,
+    data: { roomId: string },
+    cb: (result: {
+      success: boolean;
+      data?: JoinRoomResponse;
+      error?: string;
+    }) => void
+  ) {
+    try {
+      const userId = socket.data.userId;
+      if (!userId) throw new Error("User ID missing from socket data");
+
+      const authUser = await getUserFromID(userId);
+      if (!authUser) throw new Error("Authenticated user not found");
+
+      const { id, username } = authUser;
+      let User: User | null = null;
+      const roomId = data.roomId;
+
+      if (!roomId) {
+        throw new Error("Room ID is required for reconnection");
+      }
+
+      User = this.tryReconnection(authUser.id, socket.id) || null;
+      if (!User) {
+        throw new Error("Failed to reconnect user");
+      }
+
+      cb({
+        success: true,
+        data: {
+          user: {
+            userId,
+            userName: username,
+            availability: User.availability,
+            sprite: User.sprite,
+          },
+          room: { roomId },
+        },
+      });
+    } catch (error: any) {
+      console.error("Reconnection error:", error.message);
+      cb({
+        success: false,
+        error: error.message || "An unknown error occurred during reconnection",
+      });
     }
   }
 
@@ -465,17 +525,18 @@ export default class WebSocketService {
     userId: string,
     username: string,
     roomId: string,
-    socketId: string
+    socketId: string,
+    sprite: SpriteNames
   ): User {
     const spawnPosition = this.toPixels(
       DEFAULT_SPAWN_TILE.x,
       DEFAULT_SPAWN_TILE.y
     );
-
+    console.log("create", sprite);
     return {
       id: userId,
       availability: "idle",
-      sprite: "",
+      sprite: sprite,
       username,
       x: spawnPosition.x,
       y: spawnPosition.y,

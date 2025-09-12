@@ -11,6 +11,8 @@ export interface userData {
 
 export type UserAvailabilityStatus = "idle" | "busy" | "away";
 
+export type SpriteNames = "Ash" | "Lucy" | "Nancy" | "Adam";
+export const Sprites: SpriteNames[] = ["Ash", "Lucy", "Nancy", "Adam"];
 export interface User {
   id: string;
   availability: UserAvailabilityStatus;
@@ -23,7 +25,7 @@ export interface User {
   roomId: string;
   isAudioEnabled?: boolean;
   isVideoEnabled?: boolean;
-  sprite: string | null;
+  sprite: SpriteNames;
 }
 
 export interface Room {
@@ -35,9 +37,9 @@ export interface ChatMessage {
   userId: string;
   username: string;
   message: string;
-  type: "text"|"emoji";
+  type: "text" | "emoji";
   timestamp: number;
-  roomId:string,
+  roomId: string;
   x: number;
   y: number;
   distance?: number;
@@ -99,14 +101,20 @@ export type ServerToClient = {
   }) => void;
 
   "chat:message": (chatMessage: ChatMessage) => void;
-  "chat:startTyping":({userId,username}:{userId:string,username:string})=>void
-  "chat:stopTyping":({userId}:{userId:string})=>void
+  "chat:startTyping": ({
+    userId,
+    username,
+  }: {
+    userId: string;
+    username: string;
+  }) => void;
+  "chat:stopTyping": ({ userId }: { userId: string }) => void;
 };
 export interface JoinRoomResponse {
   user: {
     userName: string;
     userId: string;
-    sprite?: string;
+    sprite: SpriteNames;
     availability: UserAvailabilityStatus;
   };
   room: {
@@ -116,9 +124,14 @@ export interface JoinRoomResponse {
 
 export type ClientToServer = {
   "join-room": (
-    data: { roomId?: string; roomName?: string },
+    data: { roomId?: string; roomName?: string; sprite: SpriteNames },
     cb: (res: { success: boolean; data?: JoinRoomResponse }) => void
   ) => Promise<void>;
+  "reconnect:room": (
+    data: { roomId: string },
+    cb: (res: { success: boolean; data?: JoinRoomResponse }) => void
+  ) => Promise<void>;
+
   "user-move": (data: { x: number; y: number }) => void;
   "media-state-changed": (data: {
     isAudioEnabled: boolean;
@@ -165,8 +178,14 @@ export type ClientToServer = {
   }) => void;
 
   "chat:message": (chatMessage: ChatMessage) => void;
-  "chat:startTyping":({userId,username}:{userId:string,username:string})=>void
-  "chat:stopTyping":({userId}:{userId:string})=>void
+  "chat:startTyping": ({
+    userId,
+    username,
+  }: {
+    userId: string;
+    username: string;
+  }) => void;
+  "chat:stopTyping": ({ userId }: { userId: string }) => void;
 };
 
 export interface TypingUser {
