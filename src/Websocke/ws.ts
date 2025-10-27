@@ -532,7 +532,6 @@ export default class WebSocketService {
       DEFAULT_SPAWN_TILE.x,
       DEFAULT_SPAWN_TILE.y
     );
-    console.log("create", sprite);
     return {
       id: userId,
       availability: "idle",
