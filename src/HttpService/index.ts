@@ -26,7 +26,7 @@ export default class httpService {
   }
   public initializeApi = () => {
     this.app.get("/", (req, res) => {
-      res.send("hiii");
+      res.send("helllo");
     });
     this.app.use("/api/v1", mainRouter);
 

@@ -1,5 +1,5 @@
 import { User } from "../types/type";
-import { RoomRuntimeState } from "../Websocke/ws";
+import { RoomRuntimeState } from "../Websocket/SocketServer";
 
 export interface AwayUsers {
   userId: string;
@@ -132,7 +132,7 @@ class RoomManager {
   public getAwayUsers() {
     return this.awayUsers;
   }
-  public getAwayUser(userId:string):AwayUsers | undefined {
+  public getAwayUser(userId: string): AwayUsers | undefined {
     return this.awayUsers.get(userId);
   }
   public awayUserDisconncted(userId: string) {
@@ -141,8 +141,8 @@ class RoomManager {
   public removeAwayUser(userId: string) {
     this.awayUsers.delete(userId);
   }
-  public checkAwayUser(userId:string ){
-    if(this.awayUsers.has(userId)) return this.awayUsers.get(userId)
+  public checkAwayUser(userId: string) {
+    if (this.awayUsers.has(userId)) return this.awayUsers.get(userId);
   }
 }
 

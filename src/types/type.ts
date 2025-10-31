@@ -1,4 +1,4 @@
-import { Socket } from "socket.io";
+import { Server, Socket } from "socket.io";
 import { Conversation } from "../ConversationRooms";
 
 export interface userData {
@@ -70,7 +70,6 @@ export type ConversationUpdatePayload = {
   left: string;
 };
 
-export type SocketType = Socket<ClientToServer | ServerToClient>;
 export type ServerToClient = {
   "room-users": (users: User[]) => void;
   "user-joined": (user: User) => void;
@@ -195,3 +194,20 @@ export interface TypingUser {
   x: number;
   y: number;
 }
+
+interface SocketData {
+  userId: string;
+  userName: string;
+}
+export type SocketType = Socket<
+  ClientToServer,
+  ServerToClient,
+  Record<string, never>,
+  SocketData
+>;
+export type ServerType = Server<
+  ClientToServer,
+  ServerToClient,
+  Record<string, never>,
+  SocketData
+>;
