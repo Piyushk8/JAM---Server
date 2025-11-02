@@ -5,11 +5,10 @@ export const handleDisconnect = (io: IO, socket: SocketType, deps: IDeps) => {
   socket.on("disconnect", (): void => {
     const { roomManager } = deps;
     const user = roomManager.getUser(socket.data.userId);
-    console.log("User disconnected:", socket.data.userId, user);
     if (!user) return;
     roomManager.setAwayUser(user.roomId, user.id);
-    cleanupUserDisconnection(io, user, user.id, deps);
-  });
+    // cleanupUserDisconnection(io, user, user.id, deps);
+    });
 };
 
 export const cleanupUserDisconnection = (

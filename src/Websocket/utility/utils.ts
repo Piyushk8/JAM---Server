@@ -87,10 +87,12 @@ export const toTileCoords = (
 
 export const getRoomUsersInTileCoords = (
   roomId: string,
-  roomManager: IDeps["roomManager"]
+  roomManager: IDeps["roomManager"],
 ) => {
-  return Array.from(roomManager.getRoomUsers(roomId).values()).map((user) => ({
-    ...user,
-    ...toTileCoords(user.x, user.y),
-  }));
+  return (Array.from(roomManager.getRoomUsers(roomId).values()) as User[]).map(
+    (user) => ({
+      ...user,
+      ...toTileCoords(user.x, user.y),
+    })
+  );
 };

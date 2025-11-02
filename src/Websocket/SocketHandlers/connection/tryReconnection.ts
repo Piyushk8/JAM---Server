@@ -7,7 +7,6 @@ export const tryReconnection = (
 ) => {
   const user = roomManager.getUser(userId);
   if (!user) return false; // no previous user state
-
   const awayInfo = roomManager.getAwayUser(userId);
   if (!awayInfo) return false; // user wasn’t marked away
 

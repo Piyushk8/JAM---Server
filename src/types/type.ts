@@ -28,9 +28,30 @@ export interface User {
   sprite: SpriteNames;
 }
 
+export interface AwayUsers {
+  userId: string;
+  roomId: string;
+  awaySince: number;
+}
+
+export type RoomThemes = "office 1" | "larger office 1" | "larger office 2";
+
+export const RoomThemesId = {
+  "office 1": 1,
+  "larger office 1": 2,
+  "larger office 2": 3,
+} as const;
+
+export type RoomThemesId = (typeof RoomThemesId)[keyof typeof RoomThemesId];
+
+export const RoomThemesName = Object.fromEntries(
+  Object.entries(RoomThemesId).map(([key, value]) => [value, key])
+) as Record<RoomThemesId, keyof typeof RoomThemesId>;
+
 export interface Room {
   id: string;
   users: Map<string, User>;
+  roomThemeId: RoomThemesId;
 }
 export interface ChatMessage {
   id: string;
@@ -109,6 +130,7 @@ export type ServerToClient = {
   }) => void;
   "chat:stopTyping": ({ userId }: { userId: string }) => void;
 };
+
 export interface JoinRoomResponse {
   user: {
     userName: string;

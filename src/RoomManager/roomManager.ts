@@ -1,11 +1,6 @@
-import { User } from "../types/type";
+import { AwayUsers, User } from "../types/type";
 import { RoomRuntimeState } from "../Websocket/SocketServer";
 
-export interface AwayUsers {
-  userId: string;
-  roomId: string;
-  awaySince: number;
-}
 
 class RoomManager {
   private rooms: Map<string, RoomRuntimeState>;

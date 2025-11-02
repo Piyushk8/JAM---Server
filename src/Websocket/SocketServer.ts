@@ -13,6 +13,7 @@ import {
   ProximityUser,
   Room,
   RoomSyncPayload,
+  RoomThemesId,
   ServerToClient,
   ServerType,
   SocketType,
@@ -23,7 +24,7 @@ import {
 import cookie from "cookie";
 import { diffSets, SpatialGrid } from "../lib/spatialGrid";
 import { CELL_SIZE, FRONTEND_URL, TICK_RATE } from "../lib/contants";
-import roomManager, { AwayUsers } from "../RoomManager";
+import roomManager from "../RoomManager/roomManager";
 import { Conversation, conversationsManager } from "../ConversationRooms";
 import { randomUUID } from "crypto";
 import {
@@ -64,7 +65,6 @@ export default function createSocketServer(http: http.Server) {
   const io: ServerType = new Server(http, {
     cors: {
       origin: (origin, callback) => {
-        
         if (!origin || allowedOrigins.includes(origin)) {
           callback(null, true);
         } else {

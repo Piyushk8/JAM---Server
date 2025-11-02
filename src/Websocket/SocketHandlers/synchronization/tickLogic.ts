@@ -1,8 +1,7 @@
 import { TICK_RATE } from "../../../lib/contants";
 import { diffSets } from "../../../lib/spatialGrid";
 import { calculateAudioLevel, calculateDistance } from "../../../lib/util";
-import { AwayUsers } from "../../../RoomManager";
-import { User } from "../../../types/type";
+import { AwayUsers, User } from "../../../types/type";
 import { IDeps, IO, RoomRuntimeState } from "../../SocketServer";
 import { GRACE_PERIOD, PROXIMITY_THRESHOLD } from "../../utility/constants";
 import {
@@ -69,6 +68,7 @@ const processAwayUsers = (
   awayUsers.forEach((userInfo, userId) => {
     if (Date.now() - userInfo.awaySince > GRACE_PERIOD) {
       const user = roomManager.getUser(userId);
+      console.log("processing tick user -",user)
       if (user) {
         cleanupUserDisconnection(io, user, user.id, deps);
       }
@@ -97,7 +97,7 @@ const processUserTick = (
 ): void => {
   const nearbyUsers = getNearbyUsersInRange(roomId, user, deps);
   const { roomManager } = deps;
-  const players = Array.from(roomManager.getRoomUsers(roomId).values());
+  const players:User[] = Array.from(roomManager.getRoomUsers(roomId).values()); 
   const proximityData = calculateProximityChanges(
     roomId,
     user,
