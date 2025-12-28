@@ -1,3 +1,4 @@
+import { roomTheme } from "../../db/schema";
 import { checkRoomExists, createRoom, getUserFromID } from "../../Helpers/user";
 import {
   JoinRoomResponse,
@@ -18,18 +19,22 @@ export const handleJoinRoom = (io: IO, socket: SocketType, deps: IDeps) => {
   socket.on(
     "join-room",
     async (
-      data: { roomId?: string; roomName?: string; sprite: SpriteNames },
-      callback: (result: { success: boolean; data?: JoinRoomResponse }) => void
+      data: {
+        roomId?: string;
+        roomName?: string;
+        sprite: SpriteNames;
+        roomTheme?: roomTheme;
+      },
+      cb: (res: { success: boolean; data: JoinRoomResponse | null }) => void
     ) => {
       try {
         const userId = socket.data.userId;
         const authUser = await getUserFromID(userId);
         if (!authUser) throw new Error("Auth user not found");
-
-        const { id, username } = authUser;
+        const { username } = authUser;
         let user: User;
+        let roomTheme: roomTheme;
         let roomId: string;
-
         if (data.roomId && !data.roomName) {
           user = await joinExistingRoom(
             socket,
@@ -40,23 +45,31 @@ export const handleJoinRoom = (io: IO, socket: SocketType, deps: IDeps) => {
             deps
           );
           roomId = data.roomId;
+          roomTheme = deps.roomManager.getRoomTheme(roomId)!;
         } else if (data.roomName && !data.roomId) {
-          console.log("before", data.sprite);
           const result = await createAndJoinRoom(
             socket,
             data.roomName,
+            data.roomTheme!,
             userId,
             username,
             data.sprite,
             deps
           );
-          console.log("after", result.user);
           user = result.user;
-          roomId = result.roomId;
+          roomId = result.room.roomId;
+          roomTheme = deps.roomManager.getRoomTheme(roomId)!;
         } else {
           throw new Error("Provide either roomId or roomName, not both");
         }
-        callback({
+
+        if (!roomId || !roomTheme)
+          throw new Error(
+            `${!roomTheme ? "no room theme provided" : ""} ${
+              !roomId ? "no room Id provided" : ""
+            }`
+          );
+        cb({
           success: true,
           data: {
             user: {
@@ -65,12 +78,15 @@ export const handleJoinRoom = (io: IO, socket: SocketType, deps: IDeps) => {
               availability: user.availability,
               sprite: user.sprite,
             },
-            room: { roomId },
+            room: { roomId, roomTheme } as {
+              roomId: string;
+              roomTheme: roomTheme;
+            },
           },
         });
       } catch (error) {
         console.error("Error in join-room:", error);
-        callback({ success: false });
+        cb({ success: false, data: null });
       }
     }
   );
@@ -106,17 +122,19 @@ const joinExistingRoom = async (
 const createAndJoinRoom = async (
   socket: SocketType,
   roomName: string,
+  roomTheme: roomTheme,
   userId: string,
   username: string,
   sprite: SpriteNames,
   deps: IDeps
 ) => {
-  const { success, room } = await createRoom(roomName);
+  const { success, room } = await createRoom(roomName, roomTheme);
   if (!success || !room?.id) throw new Error("Error creating room");
 
   const user = createUser(userId, username, room.id, socket.id, sprite);
 
   addUserToRoom(socket, room.id, user, deps);
+  deps.roomManager.setRoomTheme(room.id, roomTheme);
 
   socket.join(room.id);
   socket.emit(
@@ -125,5 +143,5 @@ const createAndJoinRoom = async (
   );
   socket.to(room.id).emit("user-joined", { ...user, ...DEFAULT_SPAWN_TILE });
 
-  return { user, roomId: room.id };
+  return { user, room: { roomId: room.id, roomTheme: room.theme } };
 };

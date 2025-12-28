@@ -14,5 +14,6 @@ export const tryReconnection = (
   user.socketId = socketId;
   user.availability = "idle";
   roomManager.removeAwayUser(userId);
+  
   return user;
 };

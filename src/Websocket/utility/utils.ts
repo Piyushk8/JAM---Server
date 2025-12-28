@@ -1,3 +1,4 @@
+import { roomTheme } from "../../db/schema";
 import { SpatialGrid } from "../../lib/spatialGrid";
 import { TILE_SIZE } from "../../lib/util";
 import { SocketType, SpriteNames, User } from "../../types/type";
@@ -30,7 +31,7 @@ export const addUserToRoom = (
   socket: SocketType,
   roomId: string,
   user: User,
-  { roomManager, spatialGrid }: IDeps
+  { roomManager, spatialGrid }: IDeps,
 ): void => {
   roomManager.ensureRoom(roomId);
   roomManager.addUserToRoom(roomId, user);

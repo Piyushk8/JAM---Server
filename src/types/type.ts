@@ -1,5 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { Conversation } from "../ConversationRooms";
+import { roomTheme } from "../db/schema";
 
 export interface userData {
   id: string;
@@ -92,6 +93,11 @@ export type ConversationUpdatePayload = {
 };
 
 export type ServerToClient = {
+  "whiteboard:state": (data: { boardId: string; elements: any[] }) => void;
+  "whiteboard:remote-update": (data: {
+    boardId: string;
+    elements: any[];
+  }) => void;
   "room-users": (users: User[]) => void;
   "user-joined": (user: User) => void;
   "user-left": (userId: string) => void;
@@ -113,7 +119,6 @@ export type ServerToClient = {
     conversationId: string;
     userDeclined: string;
   }) => void;
-
   "call-accepted-response": (data: {
     conversationId: string;
     targetUserId: string;
@@ -121,13 +126,7 @@ export type ServerToClient = {
   }) => void;
 
   "chat:message": (chatMessage: ChatMessage) => void;
-  "chat:startTyping": ({
-    userId,
-    username,
-  }: {
-    userId: string;
-    username: string;
-  }) => void;
+  "chat:startTyping": (data: TypingUser) => void;
   "chat:stopTyping": ({ userId }: { userId: string }) => void;
 };
 
@@ -140,13 +139,22 @@ export interface JoinRoomResponse {
   };
   room: {
     roomId: string;
+    roomTheme: roomTheme;
   };
 }
 
 export type ClientToServer = {
+  "whiteboard:join": (data: { boardId: string }) => void;
+  "whiteboard:leave": (data: { boardId: string }) => void;
+  "whiteboard:update": (data: { boardId: string; elements: any[] }) => void;
   "join-room": (
-    data: { roomId?: string; roomName?: string; sprite: SpriteNames },
-    cb: (res: { success: boolean; data?: JoinRoomResponse }) => void
+    data: {
+      roomId?: string;
+      roomName?: string;
+      sprite: SpriteNames;
+      roomTheme?: roomTheme;
+    },
+    cb: (res: { success: boolean; data: JoinRoomResponse|null }) => void
   ) => Promise<void>;
   "reconnect:room": (
     data: { roomId: string },
@@ -158,14 +166,14 @@ export type ClientToServer = {
     isAudioEnabled: boolean;
     isVideoEnabled: boolean;
   }) => void;
-  // "send-message": (data: { message: string; type: "text" | "emoji" }) => void;
+  "send-message": (data: { message: string; type: "text" | "emoji" }) => void;
   "typing-start": () => void;
   "typing-stop": () => void;
+  userStatusChange: (data: { status: UserAvailabilityStatus }) => void;
   "call:invite": (
     { targetUserId }: { targetUserId: string },
     callback: (res: { success: boolean; conversation: Conversation }) => void
   ) => void;
-  userStatusChange: (data: { status: UserAvailabilityStatus }) => void;
   "call:accept": (
     {
       conversationId,
@@ -173,15 +181,14 @@ export type ClientToServer = {
       from,
     }: {
       conversationId: string;
-      targetUserId: string;
       from: string;
+      targetUserId: string;
     },
     cb: (res: {
       isConversationActive: boolean;
       conversation: Conversation | null;
     }) => void
   ) => void;
-
   "call:decline": ({
     conversationId,
     userDeclined,
@@ -197,15 +204,8 @@ export type ClientToServer = {
   }: {
     conversationId: string;
   }) => void;
-
   "chat:message": (chatMessage: ChatMessage) => void;
-  "chat:startTyping": ({
-    userId,
-    username,
-  }: {
-    userId: string;
-    username: string;
-  }) => void;
+  "chat:startTyping": (data: TypingUser) => void;
   "chat:stopTyping": ({ userId }: { userId: string }) => void;
 };
 

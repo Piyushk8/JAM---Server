@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
-import { Rooms, RoomUsers, Users } from "../db/schema";
+import { Rooms, roomTheme, RoomUsers, Users } from "../db/schema";
 import { eq } from "drizzle-orm";
-import { Room } from "livekit-server-sdk";
 import { db } from "../db/init";
 
 export const createUser = async (username: string, password: string) => {
@@ -12,9 +11,8 @@ export const createUser = async (username: string, password: string) => {
 
   return user;
 };
-export const getUserFromID = async (userId:string) => {
-  const user = await db
-    .query.Users.findFirst({where:eq(Users.id, userId)})
+export const getUserFromID = async (userId: string) => {
+  const user = await db.query.Users.findFirst({ where: eq(Users.id, userId) });
   return user ?? null;
 };
 
@@ -69,7 +67,8 @@ export const getRoom = async (
 };
 
 export const createRoom = async (
-  roomName: string
+  roomName: string,
+  roomTheme: roomTheme
 ): Promise<{
   success: boolean;
   room?: typeof Rooms.$inferInsert;
@@ -79,6 +78,7 @@ export const createRoom = async (
     const room = await db
       .insert(Rooms)
       .values({
+        theme: roomTheme,
         name: roomName,
         liveKitRoomName: `lv-${randomUUID()}`,
       })

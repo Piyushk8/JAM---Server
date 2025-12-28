@@ -1,4 +1,5 @@
 import { getUserFromID } from "../../../Helpers/user";
+import roomManager from "../../../RoomManager/roomManager";
 import { JoinRoomResponse, SocketType, User } from "../../../types/type";
 import { IDeps, IO } from "../../SocketServer";
 import { tryReconnection } from "./tryReconnection";
@@ -31,10 +32,10 @@ export const handleReconnection = (io: IO, socket: SocketType, deps: IDeps) => {
 
         User =
           tryReconnection(authUser.id, socket.id, deps.roomManager) || null;
-        if (!User) {
+        const roomTheme = roomManager.getRoomsMap().get(roomId)?.roomTheme;
+        if (!User || !roomTheme) {
           throw new Error("Failed to reconnect user");
         }
-
         cb({
           success: true,
           data: {
@@ -44,7 +45,7 @@ export const handleReconnection = (io: IO, socket: SocketType, deps: IDeps) => {
               availability: User.availability,
               sprite: User.sprite,
             },
-            room: { roomId },
+            room: { roomId, roomTheme: roomTheme },
           },
         });
       } catch (error: any) {

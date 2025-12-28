@@ -1,6 +1,6 @@
+import { roomTheme } from "../db/schema";
 import { AwayUsers, User } from "../types/type";
 import { RoomRuntimeState } from "../Websocket/SocketServer";
-
 
 class RoomManager {
   private rooms: Map<string, RoomRuntimeState>;
@@ -74,13 +74,22 @@ class RoomManager {
     this.rooms.get(roomId)?.proximity.delete(userId);
   }
 
+  public setRoomTheme(roomId: string, theme: roomTheme) {
+    this.ensureRoom(roomId);
+    this.rooms.get(roomId)!.roomTheme = theme;
+  }
+
+  public getRoomTheme(roomId: string): roomTheme | undefined {
+    return this.rooms.get(roomId)?.roomTheme;
+  }
+
   // ---------- Proximity Management ----------
 
   public setProximityMap(
     roomId: string,
     proximityMap: Map<string, Set<string>>
-  ): void {
-    this.ensureRoom(roomId);
+  ): void | boolean {
+    if (!this.rooms.has(roomId)) return false;
     this.rooms.get(roomId)!.proximity = proximityMap;
   }
 
@@ -99,8 +108,8 @@ class RoomManager {
     roomId: string,
     userId: string,
     nearbySet: Set<string>
-  ): void {
-    this.ensureRoom(roomId);
+  ): void | false {
+    if (!this.rooms.has(roomId)) return false;
     this.rooms.get(roomId)!.proximity.set(userId, nearbySet);
   }
 
