@@ -1,5 +1,6 @@
 import { Application } from "express";
 import express from "express";
+import crypto from "crypto";
 import cors from "cors";
 import { AccessToken } from "livekit-server-sdk";
 import dotenv from "dotenv";
@@ -7,6 +8,9 @@ import { LIVEKIT_API_KEY, LIVEKIT_API_SECRET } from "../index";
 import { mainRouter } from "./Routers";
 import cookieParser from "cookie-parser";
 import { FRONTEND_URL } from "../lib/contants";
+import pinoHttp from "pino-http";
+import logger from "../lib/logger";
+
 dotenv.config();
 
 export default class httpService {
@@ -18,10 +22,26 @@ export default class httpService {
       cors({
         origin: allowedOrigins,
         credentials: true,
-      })
+      }),
     );
     this.app.use(cookieParser());
     this.app.use(express.json());
+    this.app.use(
+      pinoHttp({
+        logger,
+        customProps: (req) => ({
+          requestId: req.id,
+        }),
+      }),
+    );
+
+    this.app.use((req, res, next) => {
+      req.id = crypto.randomUUID();
+      req.log = req.log.child({ requestId: req.id });
+      next();
+    });
+
+
     this.initializeApi();
   }
   public initializeApi = () => {

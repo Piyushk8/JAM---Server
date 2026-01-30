@@ -51,6 +51,7 @@ export type RoomRuntimeState = {
 };
 import http from "http";
 import { roomTheme } from "../db/schema";
+import logger from "../lib/logger";
 
 export type IO = ServerType;
 export interface IDeps {
@@ -59,7 +60,7 @@ export interface IDeps {
   spatialGrid: SpatialGrid;
 }
 
-// ✅ Whiteboard storage - stores drawing elements per board
+// Whiteboard storage - stores drawing elements per board
 const boards: Record<string, any[]> = {};
 
 export default function createSocketServer(http: http.Server) {
@@ -68,6 +69,7 @@ export default function createSocketServer(http: http.Server) {
   }
   const allowedOrigins = ["http://localhost:5173", FRONTEND_URL];
 
+  const connectionId = crypto.randomUUID();
   const io: ServerType = new Server(http, {
     cors: {
       origin: (origin, callback) => {
@@ -85,20 +87,21 @@ export default function createSocketServer(http: http.Server) {
 
   const spatialGrid = new SpatialGrid(CELL_SIZE);
   io.on("connection", (socket: SocketType) => {
-    console.log("User connected:", socket.id, socket.data.userId);
+    socket.data.connectionId = connectionId;
+    socket.data.log = logger.child({
+      connectionId: socket.data.connectionId,
+      transport: "socket",
+    });
+    socket.data.log.info(`socket connected ${socket.data.userId}`);
     registerHandlers(io, socket, {
       roomManager,
       spatialGrid,
       conversationsManager,
     });
 
-    // ✅ WHITEBOARD HANDLERS
-
-    // Join a whiteboard room
     socket.on("whiteboard:join", ({ boardId }) => {
       console.log(`[Whiteboard] ${socket.id} joining board: ${boardId}`);
 
-      // Join the socket.io room
       socket.join(boardId);
 
       // Initialize board if it doesn't exist
@@ -114,16 +117,15 @@ export default function createSocketServer(http: http.Server) {
       });
 
       console.log(
-        `[Whiteboard] Sent ${boards[boardId].length} elements to ${socket.id}`
+        `[Whiteboard] Sent ${boards[boardId].length} elements to ${socket.id}`,
       );
     });
 
-    // Handle whiteboard updates
     socket.on("whiteboard:update", ({ boardId, elements }) => {
       console.log(
         `[Whiteboard] Update from ${socket.id} on ${boardId} - ${
           elements?.length || 0
-        } elements`
+        } elements`,
       );
 
       if (!boardId || !elements) {
@@ -131,7 +133,6 @@ export default function createSocketServer(http: http.Server) {
         return;
       }
 
-      // Update the board state
       boards[boardId] = elements;
 
       // Broadcast to all OTHER users in the same board
@@ -152,8 +153,6 @@ export default function createSocketServer(http: http.Server) {
     // Clean up on disconnect
     socket.on("disconnect", () => {
       console.log(`[Whiteboard] User ${socket.id} disconnected`);
-      // Optionally: Clean up empty boards after some time
-      // This prevents memory leaks but you might want to persist boards
     });
   });
 

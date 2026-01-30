@@ -1,6 +1,7 @@
 import { Server, Socket } from "socket.io";
 import { Conversation } from "../ConversationRooms";
 import { roomTheme } from "../db/schema";
+import { Logger } from "pino";
 
 export interface userData {
   id: string;
@@ -220,6 +221,8 @@ export interface TypingUser {
 interface SocketData {
   userId: string;
   userName: string;
+  connectionId:string;
+  log:Logger;
 }
 export type SocketType = Socket<
   ClientToServer,
