@@ -13,11 +13,10 @@ import { cleanupUserDisconnection } from "../connection/handleDisconnect";
 
 export const startTick = (
   io: IO,
-  tickHandle: NodeJS.Timeout | null,
   deps: IDeps
-): void => {
+): NodeJS.Timeout => {
   const interval = 1000 / TICK_RATE;
-  tickHandle = setInterval(() => tick(io, deps), interval);
+  return setInterval(() => tick(io, deps), interval);
 };
 
 export const stopTick = (tickHandle: NodeJS.Timeout | null): void => {
@@ -43,14 +42,14 @@ const tick = (io: IO, deps: IDeps): void => {
 const emitRoomSync = (
   io: IO,
   user: User,
-  nearbyUsers: User[],
+  roomPlayers: User[],
   data: any
 ): void => {
   const { proximityChanges, audioLevels } = data;
   io.to(user.socketId).emit("room-sync", {
     ts: Date.now(),
     me: toTileCoords(user.x, user.y),
-    players: nearbyUsers.map(mapUserToTileCoords.bind(this)),
+    players: roomPlayers,
     proximity: proximityChanges,
     audio: audioLevels,
   });
@@ -68,7 +67,6 @@ const processAwayUsers = (
   awayUsers.forEach((userInfo, userId) => {
     if (Date.now() - userInfo.awaySince > GRACE_PERIOD) {
       const user = roomManager.getUser(userId);
-      console.log("processing tick user -",user)
       if (user) {
         cleanupUserDisconnection(io, user, user.id, deps);
       }
@@ -83,9 +81,10 @@ const processRoomTick = (
   deps: IDeps
 ): void => {
   const users = Array.from(room.users.values());
+  const roomPlayers = users.map(mapUserToTileCoords);
 
   for (const user of users) {
-    processUserTick(io, roomId, user, deps);
+    processUserTick(io, roomId, user, roomPlayers, deps);
   }
 };
 
@@ -93,11 +92,10 @@ const processUserTick = (
   io: IO,
   roomId: string,
   user: User,
+  roomPlayers: User[],
   deps: IDeps
 ): void => {
   const nearbyUsers = getNearbyUsersInRange(roomId, user, deps);
-  const { roomManager } = deps;
-  const players:User[] = Array.from(roomManager.getRoomUsers(roomId).values()); 
   const proximityData = calculateProximityChanges(
     roomId,
     user,
@@ -105,7 +103,7 @@ const processUserTick = (
     deps
   );
 
-  emitRoomSync(io, user, players, proximityData);
+  emitRoomSync(io, user, roomPlayers, proximityData);
 };
 
 const getNearbyUsersInRange = (

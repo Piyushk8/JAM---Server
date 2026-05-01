@@ -38,6 +38,7 @@ import { parseCookiesWithQs } from "./auth/cookieParser";
 import authMiddleware from "./auth/authMiddleware";
 import { registerHandlers } from "./registerHandler";
 import { DefaultEventsMap, Server } from "socket.io";
+import { startTick } from "./SocketHandlers/synchronization/tickLogic";
 const PROXIMITY_THRESHOLD = 150;
 const CHAT_RANGE = 200;
 const MOVE_LIMIT_MS = 33; // ~30Hz throttling
@@ -69,7 +70,6 @@ export default function createSocketServer(http: http.Server) {
   }
   const allowedOrigins = ["http://localhost:5173", FRONTEND_URL];
 
-  const connectionId = crypto.randomUUID();
   const io: ServerType = new Server(http, {
     cors: {
       origin: (origin, callback) => {
@@ -86,7 +86,13 @@ export default function createSocketServer(http: http.Server) {
   io.use(authMiddleware);
 
   const spatialGrid = new SpatialGrid(CELL_SIZE);
+  startTick(io, {
+    roomManager,
+    spatialGrid,
+    conversationsManager,
+  });
   io.on("connection", (socket: SocketType) => {
+    const connectionId = crypto.randomUUID();
     socket.data.connectionId = connectionId;
     socket.data.log = logger.child({
       connectionId: socket.data.connectionId,
@@ -100,14 +106,11 @@ export default function createSocketServer(http: http.Server) {
     });
 
     socket.on("whiteboard:join", ({ boardId }) => {
-      console.log(`[Whiteboard] ${socket.id} joining board: ${boardId}`);
-
       socket.join(boardId);
 
       // Initialize board if it doesn't exist
       if (!boards[boardId]) {
         boards[boardId] = [];
-        console.log(`[Whiteboard] Created new board: ${boardId}`);
       }
 
       // Send current board state to the joining client
@@ -116,18 +119,9 @@ export default function createSocketServer(http: http.Server) {
         elements: boards[boardId],
       });
 
-      console.log(
-        `[Whiteboard] Sent ${boards[boardId].length} elements to ${socket.id}`,
-      );
     });
 
     socket.on("whiteboard:update", ({ boardId, elements }) => {
-      console.log(
-        `[Whiteboard] Update from ${socket.id} on ${boardId} - ${
-          elements?.length || 0
-        } elements`,
-      );
-
       if (!boardId || !elements) {
         console.warn(`[Whiteboard] Invalid update data from ${socket.id}`);
         return;
@@ -140,20 +134,15 @@ export default function createSocketServer(http: http.Server) {
         boardId,
         elements,
       });
-
-      console.log(`[Whiteboard] Broadcasted update to board ${boardId}`);
     });
 
     // Leave a whiteboard room
     socket.on("whiteboard:leave", ({ boardId }) => {
-      console.log(`[Whiteboard] ${socket.id} leaving board: ${boardId}`);
       socket.leave(boardId);
     });
 
     // Clean up on disconnect
-    socket.on("disconnect", () => {
-      console.log(`[Whiteboard] User ${socket.id} disconnected`);
-    });
+    socket.on("disconnect", () => {});
   });
 
   return io;

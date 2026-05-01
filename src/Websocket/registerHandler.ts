@@ -8,12 +8,9 @@ import { handleJoinRoom } from "./SocketHandlers/handleJoinRoom";
 import { handleMediaStateChange } from "./SocketHandlers/handleMediaState";
 import { handleUserMove } from "./SocketHandlers/handleUserMove";
 import { handleUserAvailabilityChange } from "./SocketHandlers/handleUserStatusChange";
-import { startTick } from "./SocketHandlers/synchronization/tickLogic";
 import { IDeps, IO } from "./SocketServer";
 
 export const registerHandlers = (io: IO, socket: SocketType, deps: IDeps) => {
-  let tickHandle: NodeJS.Timeout | null = null;
-
   handleJoinRoom(io, socket, deps);
   handleMediaStateChange(io, socket, deps);
   handleUserMove(io, socket, deps);
@@ -26,7 +23,4 @@ export const registerHandlers = (io: IO, socket: SocketType, deps: IDeps) => {
   handleDeclineCall(io, socket, deps);
   handleAcceptCall(io, socket, deps);
   handleCallInvite(io, socket, deps);
-
-  startTick(io, tickHandle, deps);
-  // Cleanup method for graceful shutdown
 };

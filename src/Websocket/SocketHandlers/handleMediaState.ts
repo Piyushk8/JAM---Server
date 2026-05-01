@@ -10,14 +10,14 @@ export const handleMediaStateChange = (
     "media-state-changed",
     (data: { isAudioEnabled: boolean; isVideoEnabled: boolean }): void => {
       const { isAudioEnabled, isVideoEnabled } = data;
-      const user = roomManager.getUser(socket.id);
+      const user = roomManager.getUser(socket.data.userId);
       if (!user) return;
 
       user.isAudioEnabled = isAudioEnabled;
       user.isVideoEnabled = isVideoEnabled;
 
       socket.to(user.roomId).emit("user-media-state-changed", {
-        userId: socket.id,
+        userId: user.id,
         isAudioEnabled,
         isVideoEnabled,
       });
