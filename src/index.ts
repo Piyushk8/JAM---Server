@@ -15,6 +15,6 @@ export const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 const httpServer = http.createServer(express.getServer());
 const wsServer = createSocketServer(httpServer);
 
-const PORT = 3000;
+const PORT = 3001;
 httpServer.listen(PORT);
 // wsService.listen(PORT);

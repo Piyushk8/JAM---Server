@@ -1,14 +1,16 @@
 import { SocketType, User } from "../../../types/type";
 import { IDeps, IO } from "../../SocketServer";
+import { pluginHost } from "../../../plugins/pluginHost";
 
 export const handleDisconnect = (io: IO, socket: SocketType, deps: IDeps) => {
-  socket.on("disconnect", (): void => {
+  socket.on("disconnect", async (): Promise<void> => {
+    await pluginHost.onRoomLeave(socket);
     const { roomManager } = deps;
     const user = roomManager.getUser(socket.data.userId);
     if (!user) return;
     roomManager.setAwayUser(user.roomId, user.id);
     // cleanupUserDisconnection(io, user, user.id, deps);
-    });
+  });
 };
 
 export const cleanupUserDisconnection = (

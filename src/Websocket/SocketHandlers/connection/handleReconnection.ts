@@ -3,6 +3,7 @@ import roomManager from "../../../RoomManager/roomManager";
 import { JoinRoomResponse, SocketType, User } from "../../../types/type";
 import { IDeps, IO } from "../../SocketServer";
 import { tryReconnection } from "./tryReconnection";
+import { pluginHost } from "../../../plugins/pluginHost";
 
 export const handleReconnection = (io: IO, socket: SocketType, deps: IDeps) => {
   socket.on(
@@ -36,6 +37,8 @@ export const handleReconnection = (io: IO, socket: SocketType, deps: IDeps) => {
         if (!User || !roomTheme) {
           throw new Error("Failed to reconnect user");
         }
+        const plugins = await pluginHost.getActivePluginsForRoom(roomId);
+        await pluginHost.onRoomJoin(socket);
         cb({
           success: true,
           data: {
@@ -45,7 +48,7 @@ export const handleReconnection = (io: IO, socket: SocketType, deps: IDeps) => {
               availability: User.availability,
               sprite: User.sprite,
             },
-            room: { roomId, roomTheme: roomTheme },
+            room: { roomId, roomTheme: roomTheme, plugins },
           },
         });
       } catch (error: any) {

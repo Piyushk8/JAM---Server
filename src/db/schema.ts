@@ -2,10 +2,9 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgEnum,
-  PgEnumColumn,
   pgTable,
-  serial,
   text,
   timestamp,
   uniqueIndex,
@@ -58,4 +57,52 @@ export const RoomUsers = pgTable("room_users", {
   lastActive: timestamp("last_active").defaultNow(),
 });
 
-export type roomTheme = (typeof roomThemeEnum.enumValues)[number]
+export const RoomPlugins = pgTable(
+  "room_plugins",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => Rooms.id, { onDelete: "cascade" }),
+    pluginId: text("plugin_id").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    configJson: jsonb("config_json")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("room_plugins_room_plugin_idx").on(
+      table.roomId,
+      table.pluginId
+    ),
+    index("room_plugins_room_idx").on(table.roomId),
+  ]
+);
+
+export const PluginState = pgTable(
+  "plugin_state",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => Rooms.id, { onDelete: "cascade" }),
+    pluginId: text("plugin_id").notNull(),
+    stateKey: text("state_key").notNull(),
+    stateJson: jsonb("state_json")
+      .$type<Record<string, unknown> | string | number | boolean | null>()
+      .notNull(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("plugin_state_room_plugin_key_idx").on(
+      table.roomId,
+      table.pluginId,
+      table.stateKey
+    ),
+    index("plugin_state_room_idx").on(table.roomId),
+  ]
+);
+
+export type roomTheme = (typeof roomThemeEnum.enumValues)[number];

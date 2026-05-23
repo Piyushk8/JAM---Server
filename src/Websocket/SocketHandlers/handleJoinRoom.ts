@@ -14,6 +14,7 @@ import {
   getRoomUsersInTileCoords,
 } from "../utility/utils";
 import { tryReconnection } from "./connection/tryReconnection";
+import { pluginHost } from "../../plugins/pluginHost";
 
 export const handleJoinRoom = (io: IO, socket: SocketType, deps: IDeps) => {
   socket.on("join-room", async (data, cb) => {
@@ -94,6 +95,9 @@ export const handleJoinRoom = (io: IO, socket: SocketType, deps: IDeps) => {
         throw new Error("Room or theme missing after join");
       }
 
+      const plugins = await pluginHost.getActivePluginsForRoom(roomId);
+      await pluginHost.onRoomJoin(socket);
+
       socket.data.log.info({ userId, roomId }, "User joined room successfully");
 
       cb({
@@ -105,7 +109,7 @@ export const handleJoinRoom = (io: IO, socket: SocketType, deps: IDeps) => {
             availability: user.availability,
             sprite: user.sprite,
           },
-          room: { roomId, roomTheme },
+          room: { roomId, roomTheme, plugins },
         },
       });
     } catch (error) {

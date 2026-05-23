@@ -53,6 +53,7 @@ export type RoomRuntimeState = {
 import http from "http";
 import { roomTheme } from "../db/schema";
 import logger from "../lib/logger";
+import { pluginHost } from "../plugins/pluginHost";
 
 export type IO = ServerType;
 export interface IDeps {
@@ -84,6 +85,7 @@ export default function createSocketServer(http: http.Server) {
   });
 
   io.use(authMiddleware);
+  pluginHost.setIO(io);
 
   const spatialGrid = new SpatialGrid(CELL_SIZE);
   startTick(io, {
@@ -104,7 +106,6 @@ export default function createSocketServer(http: http.Server) {
       spatialGrid,
       conversationsManager,
     });
-
     socket.on("whiteboard:join", ({ boardId }) => {
       socket.join(boardId);
 

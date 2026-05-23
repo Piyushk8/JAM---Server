@@ -9,13 +9,14 @@ import { handleMediaStateChange } from "./SocketHandlers/handleMediaState";
 import { handleUserMove } from "./SocketHandlers/handleUserMove";
 import { handleUserAvailabilityChange } from "./SocketHandlers/handleUserStatusChange";
 import { IDeps, IO } from "./SocketServer";
+import { pluginHost } from "../plugins/pluginHost";
 
 export const registerHandlers = (io: IO, socket: SocketType, deps: IDeps) => {
   handleJoinRoom(io, socket, deps);
   handleMediaStateChange(io, socket, deps);
   handleUserMove(io, socket, deps);
   handleUserAvailabilityChange(io, socket, deps);
-  
+  pluginHost.registerSocketHandlers(socket);
   handleReconnection(io, socket, deps);
   handleDisconnect(io, socket, deps);
 

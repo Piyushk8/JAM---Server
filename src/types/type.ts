@@ -2,6 +2,12 @@ import { Server, Socket } from "socket.io";
 import { Conversation } from "../ConversationRooms";
 import { roomTheme } from "../db/schema";
 import { Logger } from "pino";
+import type {
+  PluginActionRequest,
+  PluginActionResponse,
+  PluginEventEnvelope,
+  RoomPluginConfig,
+} from "../plugins/contracts";
 
 export interface userData {
   id: string;
@@ -15,6 +21,9 @@ export type UserAvailabilityStatus = "idle" | "busy" | "away";
 
 export type SpriteNames = "Ash" | "Lucy" | "Nancy" | "Adam";
 export const Sprites: SpriteNames[] = ["Ash", "Lucy", "Nancy", "Adam"];
+
+export type UserRole = "admin" | "member";
+
 export interface User {
   id: string;
   availability: UserAvailabilityStatus;
@@ -28,6 +37,7 @@ export interface User {
   isAudioEnabled?: boolean;
   isVideoEnabled?: boolean;
   sprite: SpriteNames;
+  role?: UserRole;
 }
 
 export interface AwayUsers {
@@ -55,6 +65,7 @@ export interface Room {
   users: Map<string, User>;
   roomThemeId: RoomThemesId;
 }
+
 export interface ChatMessage {
   id: string;
   userId: string;
@@ -67,6 +78,7 @@ export interface ChatMessage {
   y: number;
   distance?: number;
 }
+
 export interface ProximityUser extends User {
   distance: number;
 }
@@ -99,6 +111,7 @@ export type ServerToClient = {
     boardId: string;
     elements: any[];
   }) => void;
+  "plugin:event": (event: PluginEventEnvelope) => void;
   "room-users": (users: User[]) => void;
   "user-joined": (user: User) => void;
   "user-left": (userId: string) => void;
@@ -137,10 +150,12 @@ export interface JoinRoomResponse {
     userId: string;
     sprite: SpriteNames;
     availability: UserAvailabilityStatus;
+    role: UserRole;
   };
   room: {
     roomId: string;
     roomTheme: roomTheme;
+    plugins: RoomPluginConfig[];
   };
 }
 
@@ -148,6 +163,10 @@ export type ClientToServer = {
   "whiteboard:join": (data: { boardId: string }) => void;
   "whiteboard:leave": (data: { boardId: string }) => void;
   "whiteboard:update": (data: { boardId: string; elements: any[] }) => void;
+  "plugin:dispatch": (
+    request: PluginActionRequest,
+    cb: (response: PluginActionResponse) => void
+  ) => void;
   "join-room": (
     data: {
       roomId?: string;
@@ -155,7 +174,7 @@ export type ClientToServer = {
       sprite: SpriteNames;
       roomTheme?: roomTheme;
     },
-    cb: (res: { success: boolean; data: JoinRoomResponse|null }) => void
+    cb: (res: { success: boolean; data: JoinRoomResponse | null }) => void
   ) => Promise<void>;
   "reconnect:room": (
     data: { roomId: string },
@@ -220,16 +239,18 @@ export interface TypingUser {
 
 interface SocketData {
   userId: string;
-  userName: string;
-  connectionId:string;
-  log:Logger;
+  username: string;
+  connectionId: string;
+  log: Logger;
 }
+
 export type SocketType = Socket<
   ClientToServer,
   ServerToClient,
   Record<string, never>,
   SocketData
 >;
+
 export type ServerType = Server<
   ClientToServer,
   ServerToClient,
