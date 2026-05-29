@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { Conversation } from "../../../ConversationRooms";
+import { notificationService } from "../../../notifications/notificationService";
 import { SocketType } from "../../../types/type";
 import { IDeps, IO } from "../../SocketServer";
 
@@ -32,6 +33,26 @@ export const handleCallInvite = (
               from: socket.data.userId,
               members: existingConversation.members,
             });
+            void notificationService
+              .create({
+                recipientId: targetUserId,
+                roomId: roomManager.getUser(socket.data.userId)?.roomId ?? null,
+                actorId: socket.data.userId,
+                actorName: socket.data.username,
+                type: "call.invite",
+                title: `${socket.data.username} invited you to a call`,
+                body: "Open the invite to join the conversation.",
+                actionSection: "chat",
+                entityType: "conversation",
+                entityId: existingConversation.conversationId,
+                metadata: { members: existingConversation.members },
+              })
+              .catch((error) =>
+                socket.data.log?.error(
+                  { err: error },
+                  "failed to create call invite notification"
+                )
+              );
 
             return;
           }
@@ -47,6 +68,26 @@ export const handleCallInvite = (
           from: creator,
           members: [creator],
         });
+        void notificationService
+          .create({
+            recipientId: targetUserId,
+            roomId: roomManager.getUser(socket.data.userId)?.roomId ?? null,
+            actorId: creator,
+            actorName: socket.data.username,
+            type: "call.invite",
+            title: `${socket.data.username} invited you to a call`,
+            body: "Open the invite to join the conversation.",
+            actionSection: "chat",
+            entityType: "conversation",
+            entityId: newConversationId,
+            metadata: { members: [creator] },
+          })
+          .catch((error) =>
+            socket.data.log?.error(
+              { err: error },
+              "failed to create call invite notification"
+            )
+          );
 
         // join the socket to the new "room"
         socket.join(newConversationId);

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { SocketType, WaveAckPayload, WaveEventPayload } from "../../types/type";
 import { IDeps, IO } from "../SocketServer";
+import { notificationService } from "../../notifications/notificationService";
 
 const rejectWave = (
   socket: SocketType,
@@ -66,6 +67,23 @@ export const handleSocialWave = (
       };
 
       io.to(target.socketId).emit("social:wave:received", payload);
+      void notificationService
+        .create({
+          recipientId: target.id,
+          roomId: data.roomId,
+          actorId: sender.id,
+          actorName: sender.username,
+          type: "social.wave",
+          title: `${sender.username} waved at you`,
+          body: "Wave back or open notifications to catch up.",
+          actionSection: "notifications",
+          entityType: "wave",
+          entityId: id,
+          metadata: payload,
+        })
+        .catch((error) =>
+          socket.data.log?.error({ err: error }, "failed to create wave notification")
+        );
 
       const ack = { id, delivered: true };
       callback?.(ack);

@@ -15,6 +15,7 @@ import type {
 } from "./contracts";
 import { getInstalledPluginById, getInstalledPluginManifests, installedPlugins, validateInstalledPlugins } from "./registry";
 import type { PluginContext, PluginRouteHelpers } from "./serverTypes";
+import { notificationService } from "../notifications/notificationService";
 
 type RateLimitEntry = {
   count: number;
@@ -300,6 +301,19 @@ class PluginHost {
     try {
       const ctx = this.buildContext(socket, user.roomId, roomPlugin);
       const data = await plugin.handleAction(ctx, request.actionId, request.payload);
+      void this.notifyPluginActivity(
+        user.roomId,
+        roomPlugin.pluginId,
+        request.actionId,
+        user.username,
+        user.id,
+        data
+      ).catch((error) =>
+        socket.data.log?.error(
+          { err: error, pluginId: request.pluginId, actionId: request.actionId },
+          "failed to create plugin activity notification"
+        )
+      );
       return {
         ok: true,
         data,
@@ -380,6 +394,58 @@ class PluginHost {
         });
       },
     };
+  }
+
+  private async notifyPluginActivity(
+    roomId: string,
+    pluginId: string,
+    actionId: string,
+    actorName: string,
+    actorId: string,
+    data: JsonValue
+  ): Promise<void> {
+    if (actionId.startsWith("get-")) {
+      return;
+    }
+
+    const plugin = getInstalledPluginById(pluginId);
+    const pluginName = plugin?.manifest.displayName ?? pluginId;
+    const labels: Record<string, string> = {
+      "send-reaction": "sent a reaction",
+      "create-poll": "created a poll",
+      vote: "voted in a poll",
+      "close-poll": "closed a poll",
+      "reset-poll": "reset a poll",
+      "delete-poll": "deleted a poll",
+      "clear-history": "cleared poll history",
+      "add-note": "added a note",
+      "update-note": "updated a note",
+      "delete-note": "deleted a note",
+      "set-track": "changed the track",
+      "toggle-play": "updated playback",
+      "set-volume": "changed the volume",
+    };
+
+    const label = labels[actionId];
+    if (!label) {
+      return;
+    }
+
+    await notificationService.createForRoom(roomId, {
+      actorId,
+      actorName,
+      type: `plugin.${pluginId}.${actionId}`,
+      title: `${actorName} ${label}`,
+      body: pluginName,
+      actionSection: "plugins",
+      entityType: "plugin",
+      entityId: pluginId,
+      metadata: {
+        pluginId,
+        actionId,
+        data: data && typeof data === "object" ? data : undefined,
+      },
+    });
   }
 
   private consumeRateLimit(

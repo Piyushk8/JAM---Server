@@ -54,6 +54,7 @@ import http from "http";
 import { roomTheme } from "../db/schema";
 import logger from "../lib/logger";
 import { pluginHost } from "../plugins/pluginHost";
+import { notificationService } from "../notifications/notificationService";
 
 export type IO = ServerType;
 export interface IDeps {
@@ -86,6 +87,7 @@ export default function createSocketServer(http: http.Server) {
 
   io.use(authMiddleware);
   pluginHost.setIO(io);
+  notificationService.setIO(io);
 
   const spatialGrid = new SpatialGrid(CELL_SIZE);
   startTick(io, {

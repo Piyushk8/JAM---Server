@@ -8,6 +8,7 @@ import type {
   PluginEventEnvelope,
   RoomPluginConfig,
 } from "../plugins/contracts";
+import type { NotificationRecord } from "../notifications/types";
 
 export interface userData {
   id: string;
@@ -161,6 +162,7 @@ export type ServerToClient = {
   "chat:stopTyping": ({ userId }: { userId: string }) => void;
   "social:wave:received": (payload: Required<WaveEventPayload>) => void;
   "social:wave:ack": (payload: WaveAckPayload) => void;
+  "notification:new": (payload: NotificationRecord) => void;
 };
 
 export interface JoinRoomResponse {
