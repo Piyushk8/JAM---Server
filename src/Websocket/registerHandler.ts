@@ -6,6 +6,7 @@ import { handleDisconnect } from "./SocketHandlers/connection/handleDisconnect";
 import { handleReconnection } from "./SocketHandlers/connection/handleReconnection";
 import { handleJoinRoom } from "./SocketHandlers/handleJoinRoom";
 import { handleMediaStateChange } from "./SocketHandlers/handleMediaState";
+import { handleSocialWave } from "./SocketHandlers/handleSocialWave";
 import { handleUserMove } from "./SocketHandlers/handleUserMove";
 import { handleUserAvailabilityChange } from "./SocketHandlers/handleUserStatusChange";
 import { IDeps, IO } from "./SocketServer";
@@ -14,6 +15,7 @@ import { pluginHost } from "../plugins/pluginHost";
 export const registerHandlers = (io: IO, socket: SocketType, deps: IDeps) => {
   handleJoinRoom(io, socket, deps);
   handleMediaStateChange(io, socket, deps);
+  handleSocialWave(io, socket, deps);
   handleUserMove(io, socket, deps);
   handleUserAvailabilityChange(io, socket, deps);
   pluginHost.registerSocketHandlers(socket);

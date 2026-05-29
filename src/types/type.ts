@@ -8,6 +8,7 @@ import type {
   PluginEventEnvelope,
   RoomPluginConfig,
 } from "../plugins/contracts";
+import type { NotificationRecord } from "../notifications/types";
 
 export interface userData {
   id: string;
@@ -105,6 +106,23 @@ export type ConversationUpdatePayload = {
   left: string;
 };
 
+export type WaveEventPayload = {
+  id?: string;
+  fromUserId: string;
+  fromUsername?: string;
+  toUserId: string;
+  toUsername?: string;
+  roomId: string;
+  timestamp?: number;
+  createdAt?: number;
+};
+
+export type WaveAckPayload = {
+  id: string;
+  delivered: boolean;
+  reason?: string;
+};
+
 export type ServerToClient = {
   "whiteboard:state": (data: { boardId: string; elements: any[] }) => void;
   "whiteboard:remote-update": (data: {
@@ -142,6 +160,9 @@ export type ServerToClient = {
   "chat:message": (chatMessage: ChatMessage) => void;
   "chat:startTyping": (data: TypingUser) => void;
   "chat:stopTyping": ({ userId }: { userId: string }) => void;
+  "social:wave:received": (payload: Required<WaveEventPayload>) => void;
+  "social:wave:ack": (payload: WaveAckPayload) => void;
+  "notification:new": (payload: NotificationRecord) => void;
 };
 
 export interface JoinRoomResponse {
@@ -150,7 +171,7 @@ export interface JoinRoomResponse {
     userId: string;
     sprite: SpriteNames;
     availability: UserAvailabilityStatus;
-    role: UserRole;
+    role?: UserRole;
   };
   room: {
     roomId: string;
@@ -227,6 +248,10 @@ export type ClientToServer = {
   "chat:message": (chatMessage: ChatMessage) => void;
   "chat:startTyping": (data: TypingUser) => void;
   "chat:stopTyping": ({ userId }: { userId: string }) => void;
+  "social:wave": (
+    data: WaveEventPayload,
+    callback?: (res: WaveAckPayload) => void
+  ) => void;
 };
 
 export interface TypingUser {

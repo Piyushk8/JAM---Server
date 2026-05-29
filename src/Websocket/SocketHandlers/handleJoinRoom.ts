@@ -15,6 +15,7 @@ import {
 } from "../utility/utils";
 import { tryReconnection } from "./connection/tryReconnection";
 import { pluginHost } from "../../plugins/pluginHost";
+import { notificationService } from "../../notifications/notificationService";
 
 export const handleJoinRoom = (io: IO, socket: SocketType, deps: IDeps) => {
   socket.on("join-room", async (data, cb) => {
@@ -97,6 +98,20 @@ export const handleJoinRoom = (io: IO, socket: SocketType, deps: IDeps) => {
 
       const plugins = await pluginHost.getActivePluginsForRoom(roomId);
       await pluginHost.onRoomJoin(socket);
+      void notificationService
+        .createForRoom(roomId, {
+          actorId: userId,
+          actorName: username,
+          type: "room.user_joined",
+          title: `${username} joined the room`,
+          body: "They are now available in this space.",
+          actionSection: "team",
+          entityType: "user",
+          entityId: userId,
+        })
+        .catch((error) =>
+          socket.data.log?.error({ err: error }, "failed to create join notification")
+        );
 
       socket.data.log.info({ userId, roomId }, "User joined room successfully");
 

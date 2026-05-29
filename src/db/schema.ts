@@ -35,6 +35,11 @@ export const roomThemeEnum = pgEnum("roomTheme", [
   "largeoffice",
 ]);
 
+export const notificationStatusEnum = pgEnum("notificationStatus", [
+  "unread",
+  "read",
+]);
+
 export const Rooms = pgTable("rooms", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("room_name").notNull(),
@@ -102,6 +107,40 @@ export const PluginState = pgTable(
       table.stateKey
     ),
     index("plugin_state_room_idx").on(table.roomId),
+  ]
+);
+
+export const Notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    recipientId: uuid("recipient_id")
+      .notNull()
+      .references(() => Users.id, { onDelete: "cascade" }),
+    roomId: uuid("room_id").references(() => Rooms.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => Users.id, { onDelete: "set null" }),
+    actorName: text("actor_name"),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    status: notificationStatusEnum().notNull().default("unread"),
+    actionSection: text("action_section"),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at").defaultNow(),
+    readAt: timestamp("read_at"),
+  },
+  (table) => [
+    index("notifications_recipient_status_idx").on(
+      table.recipientId,
+      table.status,
+      table.createdAt
+    ),
+    index("notifications_room_idx").on(table.roomId),
   ]
 );
 
