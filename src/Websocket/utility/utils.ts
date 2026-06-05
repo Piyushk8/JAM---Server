@@ -53,6 +53,8 @@ export const mapUserToTileCoords = (user: User): User => {
     y: tileCoords.y,
     availability: user.availability,
     username: user.username,
+    isAudioEnabled: user.isAudioEnabled,
+    isVideoEnabled: user.isVideoEnabled,
   };
 };
 // export const mapUserToTileCoords = (user: User): Partial<User> => {

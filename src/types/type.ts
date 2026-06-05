@@ -78,6 +78,9 @@ export interface ChatMessage {
   x: number;
   y: number;
   distance?: number;
+  scope?: "room" | "nearby" | "direct";
+  toUserId?: string;
+  recipientIds?: string[];
 }
 
 export interface ProximityUser extends User {
@@ -92,6 +95,10 @@ export type RoomSyncPayload = {
     x: number;
     y: number;
     username: string;
+    availability?: UserAvailabilityStatus;
+    isAudioEnabled?: boolean;
+    isVideoEnabled?: boolean;
+    sprite?: SpriteNames;
   }>;
   proximity: {
     entered: string[];
@@ -158,8 +165,9 @@ export type ServerToClient = {
   }) => void;
 
   "chat:message": (chatMessage: ChatMessage) => void;
+  "chat:history": (messages: ChatMessage[]) => void;
   "chat:startTyping": (data: TypingUser) => void;
-  "chat:stopTyping": ({ userId }: { userId: string }) => void;
+  "chat:stopTyping": (data: { userId: string; scope?: "room" | "nearby" }) => void;
   "social:wave:received": (payload: Required<WaveEventPayload>) => void;
   "social:wave:ack": (payload: WaveAckPayload) => void;
   "notification:new": (payload: NotificationRecord) => void;
@@ -246,8 +254,9 @@ export type ClientToServer = {
     conversationId: string;
   }) => void;
   "chat:message": (chatMessage: ChatMessage) => void;
+  "chat:history": (data: { roomId: string }) => void;
   "chat:startTyping": (data: TypingUser) => void;
-  "chat:stopTyping": ({ userId }: { userId: string }) => void;
+  "chat:stopTyping": (data: { userId: string; scope?: "room" | "nearby" }) => void;
   "social:wave": (
     data: WaveEventPayload,
     callback?: (res: WaveAckPayload) => void
@@ -260,6 +269,7 @@ export interface TypingUser {
   roomId: string;
   x: number;
   y: number;
+  scope?: "room" | "nearby" | "direct";
 }
 
 interface SocketData {

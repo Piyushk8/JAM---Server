@@ -39,6 +39,11 @@ export const notificationStatusEnum = pgEnum("notificationStatus", [
   "unread",
   "read",
 ]);
+export const chatMessageScopeEnum = pgEnum("chatMessageScope", [
+  "room",
+  "nearby",
+  "direct",
+]);
 
 export const Rooms = pgTable("rooms", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -141,6 +146,43 @@ export const Notifications = pgTable(
       table.createdAt
     ),
     index("notifications_room_idx").on(table.roomId),
+  ]
+);
+
+export const ChatMessages = pgTable(
+  "chat_messages",
+  {
+    id: text("id").primaryKey(),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => Rooms.id, { onDelete: "cascade" }),
+    senderId: uuid("sender_id")
+      .notNull()
+      .references(() => Users.id, { onDelete: "cascade" }),
+    senderName: text("sender_name").notNull(),
+    recipientId: uuid("recipient_id").references(() => Users.id, {
+      onDelete: "cascade",
+    }),
+    recipientIds: jsonb("recipient_ids").$type<string[]>().notNull().default([]),
+    scope: chatMessageScopeEnum().notNull().default("room"),
+    messageType: text("message_type").notNull().default("text"),
+    body: text("body").notNull(),
+    x: integer("x").notNull(),
+    y: integer("y").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("chat_messages_room_scope_created_idx").on(
+      table.roomId,
+      table.scope,
+      table.createdAt
+    ),
+    index("chat_messages_direct_idx").on(
+      table.roomId,
+      table.senderId,
+      table.recipientId,
+      table.createdAt
+    ),
   ]
 );
 
